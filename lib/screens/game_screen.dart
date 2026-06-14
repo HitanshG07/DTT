@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_fonts.dart';
 import '../game/game_controller.dart';
@@ -10,14 +9,7 @@ import '../overlays/pause_overlay.dart';
 ///
 /// Reference: Section 4.4, Section 5.1 S-06, Section 5.2, Section 7.2.
 class GameScreen extends StatefulWidget {
-  final SharedPreferences prefs;
-  final dynamic haptics;
-
-  const GameScreen({
-    super.key,
-    required this.prefs,
-    this.haptics,
-  });
+  const GameScreen({super.key});
 
   @override
   State<GameScreen> createState() => _GameScreenState();

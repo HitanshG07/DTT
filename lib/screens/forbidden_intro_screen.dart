@@ -75,10 +75,7 @@ class _ForbiddenIntroScreenState extends State<ForbiddenIntroScreen> with Single
           name: '/game',
           arguments: {'controller': _controller},
         ),
-        pageBuilder: (context, animation, secondaryAnimation) => GameScreen(
-          prefs: widget.prefs,
-          haptics: widget.haptics,
-        ),
+        pageBuilder: (context, animation, secondaryAnimation) => const GameScreen(),
         transitionDuration: Duration.zero,
         reverseTransitionDuration: Duration.zero,
       ),

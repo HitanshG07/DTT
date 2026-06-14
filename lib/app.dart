@@ -58,10 +58,7 @@ class _DttAppState extends State<DttApp> {
         '/start': (context) => StartScreen(prefs: widget.prefs),
         '/how-to-play': (context) => HowToPlayScreen(prefs: widget.prefs),
         '/settings': (context) => SettingsScreen(prefs: widget.prefs),
-        '/game': (context) => GameScreen(
-              prefs: widget.prefs,
-              haptics: hapticsService,
-            ),
+        '/game': (context) => const GameScreen(),
         '/dont-tap-that/tutorial': (context) => const Scaffold(
               body: Center(
                 child: Text(
