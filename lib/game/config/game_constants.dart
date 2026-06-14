@@ -1,4 +1,4 @@
-﻿/// Game-wide constants derived from the planning document.
+/// Game-wide constants derived from the planning document.
 ///
 /// Every value traces to a specific section. These are gameplay
 /// parameters -- UI-specific sizes live in app_sizes.dart.
@@ -35,10 +35,10 @@ class GameConstants {
   /// timeScale target during wrong-tap slow-motion (Section 4.5).
   static const double kSlowMotionScale = 0.4;
 
-  /// Milliseconds to ramp down to slow-motion scale (Section 4.5).
+  /// Milliseconds to hold at slow-motion scale (Section 4.5).
   static const int kSlowMotionHoldMs = 50;
 
-  /// Milliseconds to hold at slow-motion scale (Section 4.5).
+  /// Milliseconds to ramp in/out of slow-motion scale (Section 4.5).
   static const int kSlowMotionRampMs = 250;
 
   /// Object pop-in scale animation duration in ms (Section 4.5, 6.4).
