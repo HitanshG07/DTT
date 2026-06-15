@@ -1,7 +1,9 @@
+import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
-import '../constants/app_fonts.dart';
+import '../game/dtt_game.dart';
 import '../game/game_controller.dart';
+import '../game/config/level_registry.dart';
 import '../overlays/hud_overlay.dart';
 import '../overlays/pause_overlay.dart';
 
@@ -117,21 +119,15 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         body: SafeArea(
           child: Stack(
             children: [
-              // Layer 1: Flame Canvas Placeholder
-              // STAGE 3: replace this Container with GameWidget(game: ...)
-              const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      "FLAME CANVAS — Stage 3",
-                      style: TextStyle(
-                        fontFamily: AppFonts.kFontBody,
-                        fontSize: 14.0,
-                        color: AppColors.kSecondaryText,
-                      ),
-                    ),
-                  ],
+              // Layer 1: Flame GameWidget
+              GameWidget(
+                game: DttGame(
+                  controller: _controller,
+                  levelConfig: LevelRegistry.levels[0],
+                  // MOCK: level index 0 hardcoded -- replaced in Stage 4
+                  // when level selection is wired from LevelRegistry.
+                  correctColor: AppColors.kCorrect,
+                  forbiddenColor: AppColors.kWrong,
                 ),
               ),
 
