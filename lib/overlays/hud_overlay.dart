@@ -140,7 +140,7 @@ class HudOverlay extends StatelessWidget {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 2.0),
+                          // SizedBox(height: 2.0) REMOVED — caused 12px overflow on tall screens
                           const Text(
                             "AVOID",
                             style: TextStyle(

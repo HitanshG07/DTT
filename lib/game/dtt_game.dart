@@ -160,7 +160,7 @@ class DttGame extends FlameGame {
   /// Creates a new [FallingObject] for the pool. The object's shape
   /// and position are set later via [FallingObject.reconfigure].
   FallingObject _createFallingObject() {
-    return FallingObject(
+    final obj = FallingObject(
       shapeType: ShapeType.circle,
       isForbidden: false,
       levelConfig: levelConfig,
@@ -170,6 +170,10 @@ class DttGame extends FlameGame {
       onWrongTap: _onWrongTap,
       onMissed: _onMissed,
     );
+    // Pool release happens ONLY after Flame has fully removed the
+    // component from the tree, preventing ghost-loop re-acquisition.
+    obj.onRemoved = () => _pool.release(obj);
+    return obj;
   }
 
   /// Handles a correct tap on a non-forbidden object.
@@ -178,7 +182,7 @@ class DttGame extends FlameGame {
     final int prevMultiplier = _scoreManager.multiplier;
 
     _scoreManager.onCorrectTap();
-    _pool.release(obj);
+    // _pool.release removed — release now happens via obj.onRemoved
 
     // MOCK: AudioService.play('correct_tap.ogg') -- wired in Stage 5.
 
@@ -207,10 +211,11 @@ class DttGame extends FlameGame {
 
   /// Handles a wrong tap on the forbidden object.
   void _onWrongTap(FallingObject obj) {
+    if (_roundEnded) return;
     final int prevMultiplier = _scoreManager.multiplier;
 
     _scoreManager.onWrongTap();
-    _pool.release(obj);
+    // _pool.release removed — release now happens via obj.onRemoved
 
     // MOCK: AudioService.play('wrong_tap.ogg') -- wired in Stage 5.
     // MOCK: AudioService.play('life_lost.ogg') -- wired in Stage 5.
@@ -236,7 +241,7 @@ class DttGame extends FlameGame {
   /// Handles an object that fell off the screen without being tapped.
   void _onMissed(FallingObject obj) {
     _scoreManager.onMissed();
-    _pool.release(obj);
+    // _pool.release removed — release now happens via obj.onRemoved
     // No audio. No life change. Reference: Section 2.1.
   }
 
@@ -248,5 +253,11 @@ class DttGame extends FlameGame {
   void _endRound() {
     _roundEnded = true;
     // MOCK: AudioService.play('game_over.ogg') -- wired in Stage 5.
+  }
+
+  @override
+  void onRemove() {
+    _scoreManager.dispose();
+    super.onRemove();
   }
 }

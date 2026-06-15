@@ -49,6 +49,15 @@ class FallingObject extends PositionComponent with TapCallbacks {
   /// Reference: Section 2.5, kSlowMotionScale.
   double speedMultiplier = 1.0;
 
+  /// Prevents double-firing of callbacks when a pool object is
+  /// released and re-acquired before removeFromParent() completes.
+  bool _hasBeenHandled = false;
+
+  /// Called by Flame's onRemove(). Set by DttGame after acquire()
+  /// so the pool can release the slot only after the component is
+  /// fully removed from the tree.
+  VoidCallback? onRemoved;
+
   /// 50 ms audio debounce guard (Section 6.3, NFR-07).
   /// Shared across all FallingObject instances to prevent audio
   /// clipping when multiple taps fire within the debounce window.
@@ -101,7 +110,10 @@ class FallingObject extends PositionComponent with TapCallbacks {
     position.y += levelConfig.fallSpeed * speedMultiplier * dt;
 
     if (findGame() != null && position.y > findGame()!.size.y + size.x) {
-      onMissed(this);
+      if (!_hasBeenHandled) {
+        _hasBeenHandled = true;
+        onMissed(this);
+      }
       removeFromParent();
     }
   }
@@ -121,11 +133,13 @@ class FallingObject extends PositionComponent with TapCallbacks {
 
   @override
   void onTapDown(TapDownEvent event) {
+    if (_hasBeenHandled) return;
+    _hasBeenHandled = true;
+
     final now = DateTime.now();
     // ignore: unused_local_variable
     final bool audioDebounce =
         now.difference(_lastTap).inMilliseconds < 50;
-
     _lastTap = now;
 
     if (isForbidden) {
@@ -137,6 +151,12 @@ class FallingObject extends PositionComponent with TapCallbacks {
     removeFromParent();
   }
 
+  @override
+  void onRemove() {
+    super.onRemove();
+    onRemoved?.call();
+  }
+
   /// Reconfigures this object for reuse from the pool.
   ///
   /// Called by [ObjectPool] or [DttGame] when recycling a pooled instance.
@@ -146,6 +166,7 @@ class FallingObject extends PositionComponent with TapCallbacks {
     required Vector2 newPosition,
     required double newSpeedMultiplier,
   }) {
+    _hasBeenHandled = false;   // ← RESET for pool reuse
     shapeType = newShapeType;
     isForbidden = newIsForbidden;
     position.setFrom(newPosition);

@@ -13,6 +13,8 @@ class ScoreManager {
   /// The observable game state driven by this manager.
   final GameState _state;
 
+  bool _disposed = false;
+
   /// Current combo multiplier (1--kMaxCombo).
   int _multiplier = 1;
 
@@ -45,6 +47,10 @@ class ScoreManager {
 
   ScoreManager(this._state);
 
+  /// Prevents ValueNotifier writes after the owning widget is disposed.
+  /// Called from DttGame.onRemove().
+  void dispose() => _disposed = true;
+
   /// The longest streak of consecutive correct taps this round.
   int get longestStreak => _longestStreak;
 
@@ -63,6 +69,7 @@ class ScoreManager {
   /// 4. Awards points: kBasePoints * multiplier.
   /// 5. Updates streak tracking.
   void onCorrectTap() {
+    if (_disposed) return;
     _totalTapped++;
     _correctTapped++;
     _idleDecayTimer = 0.0;
@@ -98,6 +105,7 @@ class ScoreManager {
   /// 5. Deducts one life.
   /// 6. Resets current streak.
   void onWrongTap() {
+    if (_disposed) return;
     _totalTapped++;
     _idleDecayTimer = 0.0;
 
@@ -131,6 +139,7 @@ class ScoreManager {
   /// If the player has not tapped for [idleDecaySeconds], the combo
   /// multiplier drops by 1 step. Reference: Section 2.3.
   void tick(double dt) {
+    if (_disposed) return;
     _idleDecayTimer += dt;
 
     // Update decay progress for the UI arc (FR-16).
