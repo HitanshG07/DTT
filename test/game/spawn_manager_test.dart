@@ -157,5 +157,23 @@ void main() {
       final d2 = manager.tick(1.0);
       expect(d2.shouldSpawn, isTrue);
     });
+
+    test('FR-20: generateX falls back to center ± offset after 3 failed attempts', () {
+      final manager = SpawnManager(
+        config: _testConfig,
+        forbiddenShape: ShapeType.circle,
+        // All random doubles will result in positions within the overlap zone (35.2).
+        random: _FixedRandom(
+          doubleSequence: [0.1, 0.1, 0.1, 0.5], // 3 attempts are 0.1, fallback uses 0.5
+        ),
+      );
+
+      // Game width = 400, objectSize = 48, maxX = 352.
+      // Center position = 400/2 - 48/2 = 176.
+      // Fallback offset for 0.5 value = (0.5 - 0.5) * 40.0 = 0.
+      // So center + offset = 176.
+      final x = manager.generateX([30.0], 400.0);
+      expect(x, equals(176.0));
+    });
   });
 }

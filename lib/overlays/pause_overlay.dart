@@ -87,7 +87,7 @@ class PauseOverlay extends StatelessWidget {
                       elevation: 0,
                     ),
                     onPressed: () {
-                      controller.quit();
+                      controller.restart();
                       // Full state reset and restart round
                       Navigator.pushReplacementNamed(context, '/forbidden-intro');
                     },

@@ -12,6 +12,8 @@ import 'game_controller.dart';
 import 'object_pool.dart';
 import 'score_manager.dart';
 import 'spawn_manager.dart';
+import 'managers/forbidden_manager.dart';
+import 'real_game_controller.dart';
 
 /// The main Flame game engine for Don't Tap That.
 ///
@@ -51,7 +53,11 @@ class DttGame extends FlameGame {
     required this.levelConfig,
     required this.correctColor,
     required this.forbiddenColor,
-  });
+  }) {
+    if (controller is RealGameController) {
+      (controller as RealGameController).game = this;
+    }
+  }
 
   @override
   Future<void> onLoad() async {
@@ -199,6 +205,15 @@ class DttGame extends FlameGame {
     // Check combo up.
     if (_scoreManager.multiplier > prevMultiplier) {
       // MOCK: AudioService.play('combo_up.ogg') -- wired in Stage 5.
+    }
+
+    // Check proximity warning (FR-15)
+    final forbiddenObjects = children.whereType<FallingObject>().where((o) => o.isForbidden);
+    for (final forbidden in forbiddenObjects) {
+      if (ForbiddenManager.isWithinProximity(obj.position, forbidden.position)) {
+        // TODO Stage 5: fire ProximityPulse
+        break;
+      }
     }
 
     // Spawn tap feedback effect at object position.

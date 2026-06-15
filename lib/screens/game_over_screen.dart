@@ -45,11 +45,11 @@ class _GameOverScreenState extends State<GameOverScreen> {
       // For Stage 2, we fallback to 87.5 and 12, or use values passed in arguments for testing.
       _accuracy = args.containsKey('accuracy')
           ? args['accuracy'] as double?
-          : 87.5; // MOCK: accuracy = 87.5 — replaced in Stage 4
+          : _controller.accuracy;
 
       _longestStreak = args.containsKey('longestStreak')
           ? args['longestStreak'] as int
-          : 12; // MOCK: longestStreak = 12 — replaced in Stage 4
+          : _controller.longestStreak;
 
       _argsParsed = true;
 

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../game/dtt_game.dart';
 import '../game/game_controller.dart';
-import '../game/config/level_registry.dart';
 import '../overlays/hud_overlay.dart';
 import '../overlays/pause_overlay.dart';
 
@@ -123,9 +122,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
               GameWidget(
                 game: DttGame(
                   controller: _controller,
-                  levelConfig: LevelRegistry.levels[0],
-                  // MOCK: level index 0 hardcoded -- replaced in Stage 4
-                  // when level selection is wired from LevelRegistry.
+                  levelConfig: _controller.levelConfig,
                   correctColor: AppColors.kCorrect,
                   forbiddenColor: AppColors.kWrong,
                 ),

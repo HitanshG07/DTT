@@ -7,7 +7,8 @@ import '../game/config/game_constants.dart';
 import '../game/config/shape_type.dart';
 import '../game/shapes/base_shape.dart';
 import '../game/game_controller.dart';
-import '../game/mock_game_controller.dart';
+import '../game/real_game_controller.dart';
+import '../game/managers/forbidden_manager.dart';
 import 'how_to_play_screen.dart';
 import 'game_screen.dart';
 
@@ -40,9 +41,16 @@ class _ForbiddenIntroScreenState extends State<ForbiddenIntroScreen> with Single
   @override
   void initState() {
     super.initState();
-    // 1. Create and start MockGameController (or use injected controller for tests)
-    // MOCK: controller is MockGameController — replaced with RealGameController in Stage 4
-    _controller = widget.mockController ?? MockGameController();
+    // Initialize controller using RealGameController (Stage 4)
+    _controller = widget.mockController ?? RealGameController();
+
+    // Select forbidden shape using ForbiddenManager before screen appears (Section 2.5, 5.2)
+    final ShapeType selectedForbidden = ForbiddenManager.selectForbidden(
+      config: _controller.levelConfig,
+      previousForbidden: _controller.state.forbiddenShape.value,
+    );
+    _controller.state.forbiddenShape.value = selectedForbidden;
+
     _controller.start();
 
     // 2. Pulse animation for blue border (cycles 0.6 -> 1.0 at 1s interval) (Section 6.4)

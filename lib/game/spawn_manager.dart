@@ -120,7 +120,8 @@ class SpawnManager {
     final double maxX = gameWidth - objectSize;
     if (maxX <= 0) return 0.0;
 
-    for (int attempt = 0; attempt < 10; attempt++) {
+    // Cap at a maximum of 3 attempts (2 re-picks after initial attempt = 3 total attempts)
+    for (int attempt = 0; attempt < 3; attempt++) {
       final double candidateX = random.nextDouble() * maxX;
       bool overlaps = false;
 
@@ -136,8 +137,13 @@ class SpawnManager {
       }
     }
 
-    // Fallback after 10 attempts (Section 1.5 Risk 4 mitigation).
-    return random.nextDouble() * maxX;
+    // Fallback after 3 attempts: screen center ± random offset (up to 20 px either way)
+    // Reference: Risk 4 mitigation.
+    // ignore: avoid_print
+    print("WARNING: Spawn overlap check exceeded 3 attempts. Falling back to center position.");
+    final double center = gameWidth / 2 - objectSize / 2;
+    final double offset = (random.nextDouble() - 0.5) * 40.0;
+    return (center + offset).clamp(0.0, maxX);
   }
 
   /// Picks a random non-forbidden shape from the level config pool.

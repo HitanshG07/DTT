@@ -1,7 +1,9 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'config/game_constants.dart';
 import 'config/shape_type.dart';
+import 'config/level_config.dart';
+import 'config/level_registry.dart';
 import 'game_controller.dart';
 import 'game_state.dart';
 
@@ -20,6 +22,9 @@ import 'game_state.dart';
 class MockGameController implements GameController {
   @override
   final GameState state = GameState();
+
+  @override
+  LevelConfig get levelConfig => LevelRegistry.levels[0];
 
   Timer? _scoreTimer;
   Timer? _multiplierTimer;
@@ -94,6 +99,17 @@ class MockGameController implements GameController {
   }
 
   @override
+  void restart() {
+    _cancelTimers();
+    state.score.value = 0;
+    state.lives.value = GameConstants.kLives;
+    state.multiplier.value = 1;
+    state.decayProgress.value = 1.0;
+    state.forbiddenShape.value = null;
+    start();
+  }
+
+  @override
   void quit() {
     _cancelTimers();
   }
@@ -103,6 +119,12 @@ class MockGameController implements GameController {
     _cancelTimers();
     state.dispose();
   }
+
+  @override
+  double? get accuracy => 87.5;
+
+  @override
+  int get longestStreak => 12;
 
   void _cancelTimers() {
     _scoreTimer?.cancel();
