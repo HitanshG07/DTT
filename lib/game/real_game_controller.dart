@@ -7,6 +7,9 @@ import 'managers/life_manager.dart';
 import 'config/level_config.dart';
 import 'config/level_registry.dart';
 
+import '../services/audio_service.dart';
+import '../services/haptics_service.dart';
+
 /// Real game controller implementation.
 ///
 /// Owns the [DttGame] instance, manages the managers, handles scoring, and updates state.
@@ -22,10 +25,17 @@ class RealGameController implements GameController {
   late final ScoreManager scoreManager;
   late final LifeManager lifeManager;
   final ScoreService _scoreService = ScoreService();
+  
+  final AudioService? audioService;
+  final HapticsService? hapticsService;
 
   DttGame? game;
 
-  RealGameController({int level = 1}) : levelConfig = LevelRegistry.forLevel(level) {
+  RealGameController({
+    int level = 1,
+    this.audioService,
+    this.hapticsService,
+  }) : levelConfig = LevelRegistry.forLevel(level) {
     scoreManager = ScoreManager(state);
     lifeManager = LifeManager(state.lives, onRoundEnd: _handleRoundEnd);
   }

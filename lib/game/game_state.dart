@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 
 import 'config/game_constants.dart';
 import 'config/shape_type.dart';
@@ -29,7 +29,10 @@ class GameState {
   final ValueNotifier<ShapeType?> forbiddenShape =
       ValueNotifier<ShapeType?>(null);
 
-  /// Disposes all five ValueNotifiers to prevent memory leaks.
+  /// Trigger for proximity warnings (FR-15).
+  final ValueNotifier<int> proximityTrigger = ValueNotifier<int>(0);
+
+  /// Disposes all ValueNotifiers to prevent memory leaks.
   ///
   /// **WARNING:** GameScreen must call gameState.dispose() in its widget
   /// dispose() lifecycle method, BEFORE Navigator.pop() completes.
@@ -47,5 +50,6 @@ class GameState {
     multiplier.dispose();
     decayProgress.dispose();
     forbiddenShape.dispose();
+    proximityTrigger.dispose();
   }
 }

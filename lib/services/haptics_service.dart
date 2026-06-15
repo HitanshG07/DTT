@@ -10,26 +10,52 @@ class HapticsService {
 
   HapticsService(this._prefs);
 
+  bool get hapticsEnabled => _prefs.getBool('dtt_haptics_enabled') ?? true;
+
+  Future<void> correct() async {
+    if (hapticsEnabled) {
+      await HapticFeedback.selectionClick();
+    }
+  }
+
+  Future<void> wrong() async {
+    if (hapticsEnabled) {
+      await HapticFeedback.heavyImpact();
+    }
+  }
+
+  Future<void> milestone() async {
+    if (hapticsEnabled) {
+      await HapticFeedback.mediumImpact();
+    }
+  }
+
+  Future<void> lifeLost() async {
+    if (hapticsEnabled) {
+      await HapticFeedback.mediumImpact();
+    }
+  }
+
   Future<void> selectionClick() async {
-    if (_prefs.getBool('dtt_haptics_enabled') ?? true) {
+    if (hapticsEnabled) {
       await HapticFeedback.selectionClick();
     }
   }
 
   Future<void> heavyImpact() async {
-    if (_prefs.getBool('dtt_haptics_enabled') ?? true) {
+    if (hapticsEnabled) {
       await HapticFeedback.heavyImpact();
     }
   }
 
   Future<void> mediumImpact() async {
-    if (_prefs.getBool('dtt_haptics_enabled') ?? true) {
+    if (hapticsEnabled) {
       await HapticFeedback.mediumImpact();
     }
   }
 
   Future<void> lightImpact() async {
-    if (_prefs.getBool('dtt_haptics_enabled') ?? true) {
+    if (hapticsEnabled) {
       await HapticFeedback.lightImpact();
     }
   }

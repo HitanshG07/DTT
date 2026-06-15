@@ -8,6 +8,8 @@ import '../config/game_constants.dart';
 import '../config/level_config.dart';
 import '../config/shape_type.dart';
 import '../shapes/base_shape.dart';
+import '../effects/object_pop_in.dart';
+import '../dtt_game.dart';
 
 /// A falling shape component that the player can tap.
 ///
@@ -107,7 +109,9 @@ class FallingObject extends PositionComponent with TapCallbacks {
   @override
   void update(double dt) {
     super.update(dt);
-    position.y += levelConfig.fallSpeed * speedMultiplier * dt;
+    final game = findGame();
+    final double activeTimeScale = (game is DttGame) ? game.timeScale : 1.0;
+    position.y += levelConfig.fallSpeed * speedMultiplier * activeTimeScale * dt;
 
     if (findGame() != null && position.y > findGame()!.size.y + size.x) {
       if (!_hasBeenHandled) {
@@ -172,5 +176,6 @@ class FallingObject extends PositionComponent with TapCallbacks {
     position.setFrom(newPosition);
     speedMultiplier = newSpeedMultiplier;
     _shapePainter = BaseShape.forType(newShapeType);
+    add(ObjectPopIn(target: this));
   }
 }

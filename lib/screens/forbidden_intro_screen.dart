@@ -9,7 +9,8 @@ import '../game/shapes/base_shape.dart';
 import '../game/game_controller.dart';
 import '../game/real_game_controller.dart';
 import '../game/managers/forbidden_manager.dart';
-import 'how_to_play_screen.dart';
+import '../services/audio_service.dart';
+import '../services/haptics_service.dart';
 import 'game_screen.dart';
 
 /// Forbidden Intro Screen (S-05) that shows the forbidden shape for a few seconds.
@@ -18,13 +19,15 @@ import 'game_screen.dart';
 class ForbiddenIntroScreen extends StatefulWidget {
   final SharedPreferences prefs;
   final GameController? mockController; // For testing injection
-  final dynamic haptics; // Injected service
+  final HapticsService? haptics;
+  final AudioService? audio;
 
   const ForbiddenIntroScreen({
     super.key,
     required this.prefs,
     this.mockController,
     this.haptics,
+    this.audio,
   });
 
   @override
@@ -42,7 +45,10 @@ class _ForbiddenIntroScreenState extends State<ForbiddenIntroScreen> with Single
   void initState() {
     super.initState();
     // Initialize controller using RealGameController (Stage 4)
-    _controller = widget.mockController ?? RealGameController();
+    _controller = widget.mockController ?? RealGameController(
+      audioService: widget.audio,
+      hapticsService: widget.haptics,
+    );
 
     // Select forbidden shape using ForbiddenManager before screen appears (Section 2.5, 5.2)
     final ShapeType selectedForbidden = ForbiddenManager.selectForbidden(
@@ -199,3 +205,19 @@ class _ForbiddenIntroScreenState extends State<ForbiddenIntroScreen> with Single
   }
 }
 
+class ShapePainter extends CustomPainter {
+  final BaseShape shape;
+
+  ShapePainter({required this.shape});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = AppColors.kPrimaryText
+      ..style = PaintingStyle.fill;
+    shape.paintShape(canvas, size, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}

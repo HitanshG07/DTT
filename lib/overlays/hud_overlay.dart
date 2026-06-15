@@ -4,6 +4,9 @@ import '../constants/app_fonts.dart';
 import '../constants/app_sizes.dart';
 import '../game/game_controller.dart';
 import '../game/shapes/base_shape.dart';
+import '../game/effects/forbidden_pulse.dart';
+import '../game/effects/proximity_pulse.dart';
+import '../game/effects/heart_fade.dart';
 import 'combo_decay_badge.dart';
 
 /// HUD Overlay widget (S-06) showing lives, score, combo badge, and forbidden shape thumbnail.
@@ -44,12 +47,11 @@ class HudOverlay extends StatelessWidget {
                             padding: EdgeInsets.only(
                               right: index < 2 ? AppSizes.kHeartSpacing : 0.0,
                             ),
-                            child: Icon(
-                              Icons.favorite,
+                            child: HeartFade(
+                              isActive: isActive,
                               size: AppSizes.kHeartIconSize,
-                              color: isActive
-                                  ? AppColors.kWrong // Active: Red/Wrong
-                                  : AppColors.kSecondaryText, // Lost: Mid Grey
+                              activeColor: AppColors.kWrong,
+                              inactiveColor: AppColors.kSecondaryText,
                             ),
                           );
                         }),
@@ -81,7 +83,14 @@ class HudOverlay extends StatelessWidget {
                         valueListenable: state.multiplier,
                         builder: (context, multValue, child) {
                           if (multValue <= 1) {
-                            return const SizedBox.shrink();
+                            // Render at 0 opacity to warm up shaders for ComboDecayBadge and ComboDecayArc
+                            return const Opacity(
+                              opacity: 0.0,
+                              child: ComboDecayBadge(
+                                multiplier: 2,
+                                decayProgress: 0.5,
+                              ),
+                            );
                           }
                           return ValueListenableBuilder<double>(
                             valueListenable: state.decayProgress,
@@ -117,28 +126,33 @@ class HudOverlay extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              // Dashed blue border
-                              SizedBox(
-                                width: AppSizes.kForbiddenThumbnailSize,
-                                height: AppSizes.kForbiddenThumbnailSize,
-                                child: CustomPaint(
-                                  painter: DashedThumbnailBorderPainter(
-                                    color: AppColors.kAccent,
+                          ForbiddenPulse(
+                            child: ProximityPulse(
+                              trigger: state.proximityTrigger,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  // Dashed blue border
+                                  SizedBox(
+                                    width: AppSizes.kForbiddenThumbnailSize,
+                                    height: AppSizes.kForbiddenThumbnailSize,
+                                    child: CustomPaint(
+                                      painter: DashedThumbnailBorderPainter(
+                                        color: AppColors.kAccent,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                  // Shape fill
+                                  SizedBox(
+                                    width: AppSizes.kForbiddenThumbnailSize - 12.0,
+                                    height: AppSizes.kForbiddenThumbnailSize - 12.0,
+                                    child: CustomPaint(
+                                      painter: ShapeFillPainter(shape: shapePainter),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              // Shape fill
-                              SizedBox(
-                                width: AppSizes.kForbiddenThumbnailSize - 12.0,
-                                height: AppSizes.kForbiddenThumbnailSize - 12.0,
-                                child: CustomPaint(
-                                  painter: ShapeFillPainter(shape: shapePainter),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                           // SizedBox(height: 2.0) REMOVED — caused 12px overflow on tall screens
                           const Text(

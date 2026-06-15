@@ -78,6 +78,7 @@ class _DttAppState extends State<DttApp> {
             pageBuilder: (context, animation, secondaryAnimation) => ForbiddenIntroScreen(
               prefs: widget.prefs,
               haptics: hapticsService,
+              audio: audioService,
             ),
             transitionsBuilder: (context, animation, secondaryAnimation, child) {
               return FadeTransition(opacity: animation, child: child);
