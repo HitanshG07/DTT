@@ -5,6 +5,7 @@
 // FlameGame file. All Stage 6+ changes go here.
 // ═══════════════════════════════════════════════════════════════
 
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 
@@ -70,6 +71,10 @@ class DttGame extends FlameGame {
   /// Forbidden change warning active states (Section 4.6)
   bool _forbiddenWarningActive = false;
   double _forbiddenWarningTimer = 0.0;
+
+  bool _forbiddenChangeInProgress = false;
+  bool _forbiddenChangePending = false;
+  Timer? _forbiddenTimerCallback;
 
   /// Best score at the start of the round to check for personal best beat (Section 6.2)
   int _bestAtStart = 0;
@@ -144,8 +149,7 @@ class DttGame extends FlameGame {
       _forbiddenWarningTimer -= dt;
       timeScale = 0.0; // Freeze object movement during warning pause
       if (_forbiddenWarningTimer <= 0) {
-        _forbiddenWarningActive = false;
-        timeScale = 1.0;
+        _endForbiddenChangeSequence();
       }
     }
 
@@ -240,10 +244,67 @@ class DttGame extends FlameGame {
     return shapes[Random().nextInt(shapes.length)];
   }
 
+  @override
+  set paused(bool value) {
+    final wasPaused = super.paused;
+    super.paused = value;
+    if (wasPaused != value) {
+      if (value) {
+        _forbiddenTimerCallback?.cancel();
+        _forbiddenTimerCallback = null;
+      } else {
+        resume();
+      }
+    }
+  }
+
+  void resume() {
+    if (_forbiddenChangePending) {
+      _forbiddenChangePending = false;
+      _rotateForbiddenShape();
+      return;
+    }
+
+    if (_forbiddenChangeInProgress && _forbiddenWarningActive && _forbiddenWarningTimer > 0) {
+      _forbiddenTimerCallback?.cancel();
+      _forbiddenTimerCallback = Timer(
+        Duration(milliseconds: (_forbiddenWarningTimer * 1000).round()),
+        () {
+          _endForbiddenChangeSequence();
+        },
+      );
+    }
+  }
+
+  void _endForbiddenChangeSequence() {
+    if (_forbiddenChangeInProgress) {
+      timeScale = 1.0;
+      _forbiddenChangeInProgress = false;
+      _forbiddenWarningActive = false;
+      _forbiddenWarningTimer = 0.0;
+      _forbiddenTimerCallback?.cancel();
+      _forbiddenTimerCallback = null;
+    }
+  }
+
   /// Rotates the forbidden shape to a new random shape from the pool,
   /// excluding the current one (no-repeat rule, Section 2.5).
   /// Reference: FR-13, Section 2.6.
   void _rotateForbiddenShape() {
+    if (_forbiddenChangeInProgress) {
+      // ignore: avoid_print
+      print("Warning: Forbidden change sequence already in progress. Dropping trigger.");
+      return;
+    }
+
+    if (paused) {
+      _forbiddenChangePending = true;
+      return;
+    }
+
+    _forbiddenChangeInProgress = true;
+    timeScale = 0.0;
+
     _currentForbidden = ForbiddenManager.selectForbidden(
       config: levelConfig,
       previousForbidden: _currentForbidden,
@@ -261,6 +322,11 @@ class DttGame extends FlameGame {
     _forbiddenWarningActive = true;
     _forbiddenWarningTimer = 1.5;
     add(ForbiddenChangeWarningEffect(newShape: _currentForbidden));
+
+    _forbiddenTimerCallback?.cancel();
+    _forbiddenTimerCallback = Timer(const Duration(milliseconds: 1500), () {
+      _endForbiddenChangeSequence();
+    });
   }
 
   /// Creates a new [FallingObject] for the pool. The object's shape
@@ -439,6 +505,12 @@ class DttGame extends FlameGame {
 
   @override
   void onRemove() {
+    _forbiddenTimerCallback?.cancel();
+    _forbiddenTimerCallback = null;
+    _forbiddenChangeInProgress = false;
+    _forbiddenChangePending = false;
+    timeScale = 1.0;
+
     _scoreManager.dispose();
     super.onRemove();
   }
