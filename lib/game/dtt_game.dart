@@ -62,6 +62,7 @@ class DttGame extends FlameGame {
 
   double _forbiddenChangeTimer = 0.0;
   bool _roundEnded = false;
+  int _changeCount = 0;
 
   /// TimeScale lives on DttGame for wrong-tap slow-motion (FR-09, Section 6.4)
   double timeScale = 1.0;
@@ -129,15 +130,16 @@ class DttGame extends FlameGame {
     // 5. Round start audio cue (Section 6.2)
     _audio?.play('round_start.ogg');
 
-    // 6. Reset forbidden change timer.
+    // 6. Reset forbidden change timer and count.
     _forbiddenChangeTimer = 0.0;
+    _changeCount = 0;
   }
 
   @override
   void update(double dt) {
     if (_roundEnded) return;
 
-    // Handle mid-round forbidden change pause warning (Section 4.6)
+    final bool warningWasActive = _forbiddenWarningActive;
     if (_forbiddenWarningActive) {
       _forbiddenWarningTimer -= dt;
       timeScale = 0.0; // Freeze object movement during warning pause
@@ -145,24 +147,33 @@ class DttGame extends FlameGame {
         _forbiddenWarningActive = false;
         timeScale = 1.0;
       }
-      // Update children (like the warning effect text/timers) but skip gameplay logic
+    }
+
+    // 1. Forbidden change timer (Levels 4-5).
+    // Timer runs from round start (after warmup ends, not from app launch).
+    // The change sequence must NOT trigger on the Pause overlay (handled because Flame's paused is true stops update).
+    if (levelConfig.forbiddenChanges && !_spawnManager.isInWarmup && !paused) {
+      final isLevel4 = levelConfig.forbiddenInterval == 30;
+      if (!isLevel4 || _changeCount < 1) {
+        _forbiddenChangeTimer += dt;
+        if (_forbiddenChangeTimer >= levelConfig.forbiddenInterval) {
+          _rotateForbiddenShape();
+          _changeCount++;
+          _forbiddenChangeTimer = 0.0;
+        }
+      }
+    }
+
+    // If warning was active, update children/effects but skip other gameplay logic
+    if (warningWasActive) {
       super.update(dt);
       return;
     }
 
     super.update(dt);
 
-    // 1. Score manager tick (idle decay).
+    // 2. Score manager tick (idle decay).
     _scoreManager.tick(dt);
-
-    // 2. Forbidden change timer (Levels 4-5).
-    if (levelConfig.forbiddenChanges) {
-      _forbiddenChangeTimer += dt;
-      if (_forbiddenChangeTimer >= levelConfig.forbiddenInterval) {
-        _rotateForbiddenShape();
-        _forbiddenChangeTimer = 0.0;
-      }
-    }
 
     // 3. Spawn logic.
     _spawnManager.updateActiveCount(_pool.activeCount);
@@ -233,16 +244,18 @@ class DttGame extends FlameGame {
   /// excluding the current one (no-repeat rule, Section 2.5).
   /// Reference: FR-13, Section 2.6.
   void _rotateForbiddenShape() {
-    final candidates =
-        levelConfig.shapes.where((s) => s != _currentForbidden).toList();
-    if (candidates.isEmpty) return;
-
-    _currentForbidden = candidates[Random().nextInt(candidates.length)];
+    _currentForbidden = ForbiddenManager.selectForbidden(
+      config: levelConfig,
+      previousForbidden: _currentForbidden,
+    );
     controller.state.forbiddenShape.value = _currentForbidden;
     _spawnManager.forbiddenShape = _currentForbidden;
 
     // Play forbidden change audio (Section 6.2)
-    _audio?.play('forbidden_change.ogg');
+    _audio?.play('forbiddenchange.ogg');
+
+    // Fire haptic: HapticFeedback.mediumImpact (via HapticsService)
+    _haptics?.mediumImpact();
 
     // Trigger gameplay warning pause (Section 4.6)
     _forbiddenWarningActive = true;
