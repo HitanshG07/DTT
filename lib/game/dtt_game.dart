@@ -1,3 +1,10 @@
+// ═══════════════════════════════════════════════════════════════
+// dtt_game.dart — THE live FlameGame for Don't Tap That.
+// This is the only Flame world file. dont_tap_game.dart was a
+// Stage 0 stub and has been deleted. Do NOT create any other
+// FlameGame file. All Stage 6+ changes go here.
+// ═══════════════════════════════════════════════════════════════
+
 import 'dart:math';
 import 'dart:ui';
 
