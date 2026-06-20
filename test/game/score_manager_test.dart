@@ -45,28 +45,40 @@ void main() {
       expect(state.lives.value, equals(livesBefore - 1));
     });
 
-    test('wrong tap resets combo', () {
+    test('wrong tap resets combo to x1 (FR-06)', () {
       // Build some combo.
       manager.onCorrectTap();
       manager.onCorrectTap();
       expect(state.multiplier.value, greaterThan(1));
 
-      // Wrong tap should drop multiplier.
-      final int multiplierBefore = state.multiplier.value;
+      // Forbidden tap resets multiplier all the way to x1, not by one step.
       manager.onWrongTap();
-      expect(state.multiplier.value, equals(multiplierBefore - 1));
+      expect(state.multiplier.value, equals(1));
     });
 
     test('missed object does NOT decrement lives', () {
       final int livesBefore = state.lives.value;
-      manager.onMissed();
+      manager.onMissed(false);
       expect(state.lives.value, equals(livesBefore));
     });
 
-    test('missed object does NOT affect combo', () {
+    test('missed correct object drops combo multiplier by one step (FR-06)', () {
+      // Build multiplier to 3 (two correct taps with kComboThreshold = 1).
+      manager.onCorrectTap();
+      manager.onCorrectTap();
+      expect(state.multiplier.value, equals(3));
+
+      manager.onMissed(false);
+      expect(state.multiplier.value, equals(2));
+    });
+
+    test('missed forbidden object does NOT affect combo', () {
+      manager.onCorrectTap();
       manager.onCorrectTap();
       final int multiplierBefore = state.multiplier.value;
-      manager.onMissed();
+
+      // Letting the forbidden shape fall off is the desired play -- no penalty.
+      manager.onMissed(true);
       expect(state.multiplier.value, equals(multiplierBefore));
     });
 

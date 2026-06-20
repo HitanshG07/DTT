@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:dont_tap_that/game/config/level_config.dart';
 import 'package:dont_tap_that/game/config/shape_type.dart';
+import 'package:dont_tap_that/game/config/spawn_script.dart';
 import 'package:dont_tap_that/game/spawn_manager.dart';
 
 /// A deterministic Random for testing.
@@ -174,6 +175,90 @@ void main() {
       // So center + offset = 176.
       final x = manager.generateX([30.0], 400.0);
       expect(x, equals(176.0));
+    });
+
+    test('a spawn is forbidden iff its shape equals the forbidden shape', () {
+      // Cycle the random index across the whole pool so every shape gets
+      // selected over many post-warmup ticks. Guards the desync where objects
+      // were flagged forbidden independently of their shape.
+      final manager = SpawnManager(
+        config: _testConfig, // shapes: circle, square, triangle
+        forbiddenShape: ShapeType.square,
+        random: _FixedRandom(intSequence: [0, 1, 2]),
+      );
+
+      // Skip past the 12 s warmup (no forbidden spawns there).
+      manager.tick(13.0);
+
+      for (int i = 0; i < 30; i++) {
+        final d = manager.tick(2.0);
+        if (d.shouldSpawn) {
+          expect(d.isForbidden, equals(d.shapeType == ShapeType.square),
+              reason:
+                  'isForbidden must match shapeType == forbiddenShape (got '
+                  '${d.shapeType}, isForbidden=${d.isForbidden})');
+        }
+      }
+    });
+  });
+
+  group('SpawnManager scripted (tutorial hook, Section 12.3)', () {
+    SpawnManager scriptedManager(SpawnScript script,
+        {ShapeType forbidden = ShapeType.square}) {
+      return SpawnManager(
+        config: _testConfig,
+        forbiddenShape: forbidden,
+        random: _FixedRandom(),
+        script: script,
+      );
+    }
+
+    test('emits each entry in order once its delay elapses', () {
+      const script = SpawnScript([
+        SpawnScriptEntry(delay: 1.0, shapeType: ShapeType.circle, x: 100.0),
+        SpawnScriptEntry(delay: 2.0, shapeType: ShapeType.triangle, x: 200.0),
+      ]);
+      final manager = scriptedManager(script);
+
+      // Before the first delay: no spawn.
+      expect(manager.tick(0.5).shouldSpawn, isFalse);
+
+      // First entry fires once 1.0s has accumulated.
+      final first = manager.tick(0.5);
+      expect(first.shouldSpawn, isTrue);
+      expect(first.shapeType, equals(ShapeType.circle));
+      expect(first.isForbidden, isFalse);
+      expect(first.x, equals(100.0));
+
+      // Second entry needs a fresh 2.0s after the first fired.
+      expect(manager.tick(1.5).shouldSpawn, isFalse);
+      final second = manager.tick(0.5);
+      expect(second.shouldSpawn, isTrue);
+      expect(second.shapeType, equals(ShapeType.triangle));
+      expect(second.x, equals(200.0));
+    });
+
+    test('marks an entry forbidden when it matches the forbidden shape', () {
+      const script = SpawnScript([
+        SpawnScriptEntry(delay: 0.0, shapeType: ShapeType.square),
+      ]);
+      final manager = scriptedManager(script, forbidden: ShapeType.square);
+
+      final decision = manager.tick(0.0);
+      expect(decision.shouldSpawn, isTrue);
+      expect(decision.isForbidden, isTrue);
+    });
+
+    test('skips once the script is exhausted', () {
+      const script = SpawnScript([
+        SpawnScriptEntry(delay: 0.0, shapeType: ShapeType.circle),
+      ]);
+      final manager = scriptedManager(script);
+
+      expect(manager.tick(0.0).shouldSpawn, isTrue);
+      // No further entries: every subsequent tick skips.
+      expect(manager.tick(5.0).shouldSpawn, isFalse);
+      expect(manager.tick(5.0).shouldSpawn, isFalse);
     });
   });
 }

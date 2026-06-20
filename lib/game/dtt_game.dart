@@ -56,6 +56,10 @@ class DttGame extends FlameGame {
   /// Colour for the forbidden shape.
   final Color forbiddenColor;
 
+  /// Fill colour for falling shapes. Identical for forbidden and correct
+  /// objects so colour never reveals the forbidden shape (Section 2.5).
+  final Color shapeColor;
+
   late SpawnManager _spawnManager;
   late ScoreManager _scoreManager;
   late ObjectPool _pool;
@@ -88,6 +92,7 @@ class DttGame extends FlameGame {
     required this.levelConfig,
     required this.correctColor,
     required this.forbiddenColor,
+    required this.shapeColor,
   }) {
     if (controller is RealGameController) {
       (controller as RealGameController).game = this;
@@ -112,8 +117,11 @@ class DttGame extends FlameGame {
     final scoreService = ScoreService();
     _bestAtStart = await scoreService.getBestScore();
 
-    // 1. Pick initial forbidden shape.
-    _currentForbidden = _pickInitialForbidden();
+    // 1. Use the forbidden shape the Forbidden Intro already selected so the
+    //    cue the player memorised matches the in-game forbidden (Section 2.5).
+    //    Fall back to a fresh pick only if none was set (e.g. mock/test paths).
+    _currentForbidden =
+        controller.state.forbiddenShape.value ?? _pickInitialForbidden();
     controller.state.forbiddenShape.value = _currentForbidden;
 
     // 2. Initialise object pool (Section 9).
@@ -129,8 +137,13 @@ class DttGame extends FlameGame {
       random: Random(),
     );
 
-    // 4. Initialise score manager (Section 2.2, 2.3, 2.4).
-    _scoreManager = ScoreManager(controller.state);
+    // 4. Use the controller's single ScoreManager so taps, accuracy, and
+    //    longest streak share one source of truth read by the Game Over
+    //    screen (Section 2.8). Only create a local one for non-Real
+    //    controllers (mock/test paths).
+    _scoreManager = (controller is RealGameController)
+        ? (controller as RealGameController).scoreManager
+        : ScoreManager(controller.state);
 
     // 5. Round start audio cue (Section 6.2)
     _audio?.play('round_start.ogg');
@@ -336,8 +349,7 @@ class DttGame extends FlameGame {
       shapeType: ShapeType.circle,
       isForbidden: false,
       levelConfig: levelConfig,
-      correctColor: correctColor,
-      forbiddenColor: forbiddenColor,
+      shapeColor: shapeColor,
       onCorrectTap: _onCorrectTap,
       onWrongTap: _onWrongTap,
       onMissed: _onMissed,
@@ -486,8 +498,10 @@ class DttGame extends FlameGame {
 
   /// Handles an object that fell off the screen without being tapped.
   void _onMissed(FallingObject obj) {
-    _scoreManager.onMissed();
-    // No audio. No life change. Reference: Section 2.1.
+    // Missed correct objects drop the combo multiplier one step; forbidden
+    // objects falling off are exempt (FR-06, Section 2.3). No audio, no life
+    // change.
+    _scoreManager.onMissed(obj.isForbidden);
   }
 
   /// Ends the current round.

@@ -101,7 +101,7 @@ class ScoreManager {
   /// 1. Increments total tap counter (wrong tap counts as a tap).
   /// 2. Resets idle decay timer.
   /// 3. Resets combo consecutive counter.
-  /// 4. Decrements multiplier if above 1.
+  /// 4. Resets multiplier to x1 (FR-06, Section 2.3).
   /// 5. Deducts one life.
   /// 6. Resets current streak.
   void onWrongTap() {
@@ -112,10 +112,10 @@ class ScoreManager {
     _previousMultiplier = _multiplier;
     _consecutive = 0;
 
-    if (_multiplier > 1) {
-      _multiplier--;
-      _state.multiplier.value = _multiplier;
-    }
+    // Forbidden tap resets the multiplier all the way to x1 (FR-06, Section 2.3),
+    // not a single-step decrement.
+    _multiplier = 1;
+    _state.multiplier.value = _multiplier;
 
     _state.lives.value -= 1;
 
@@ -125,13 +125,22 @@ class ScoreManager {
 
   /// Processes a missed object (fell off screen without being tapped).
   ///
-  /// Does NOT decrement lives.
-  /// Does NOT affect combo.
-  /// Reference: Section 2.1 -- objects falling off screen do not cost
-  /// a life. Only tapping the forbidden shape does.
-  void onMissed() {
-    // Intentionally empty per planning document.
-    // Missed objects have no penalty in the current design.
+  /// A missed *correct* object drops the combo multiplier by one step.
+  /// There is no score deduction and no life loss. A forbidden object that
+  /// falls off untapped is exempt -- letting it fall is the desired play.
+  /// Reference: FR-06, Section 2.3, decision-0.3 (missing-object penalty).
+  ///
+  /// Does not touch the idle-decay timer or decay arc: a miss is not a tap,
+  /// so it must not reset the idle clock (the arc resets on correct tap only).
+  void onMissed(bool isForbidden) {
+    if (_disposed) return;
+    if (isForbidden) return;
+
+    if (_multiplier > 1) {
+      _previousMultiplier = _multiplier;
+      _multiplier--;
+      _state.multiplier.value = _multiplier;
+    }
   }
 
   /// Advances the idle decay timer by [dt] seconds.

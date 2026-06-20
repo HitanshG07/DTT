@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'config/level_config.dart';
 import 'config/shape_type.dart';
+import 'config/spawn_script.dart';
 
 /// Decides WHAT to spawn and WHERE. Pure Dart -- no Flame, no Flutter.
 ///
@@ -23,6 +24,19 @@ class SpawnManager {
   /// Injected random source for testability.
   final Random random;
 
+  /// Optional scripted spawn sequence for the interactive tutorial (Stage 7).
+  ///
+  /// Default null = ordinary random spawning. When supplied, the script fully
+  /// drives spawn decisions and the random/warmup/guarantee logic is bypassed.
+  /// Reference: Section 10.1 (rework-trap table), Section 12.3.
+  final SpawnScript? script;
+
+  /// Index of the next [SpawnScriptEntry] to emit (scripted mode only).
+  int _scriptIndex = 0;
+
+  /// Time accumulated toward the current scripted entry's delay.
+  double _scriptTimer = 0.0;
+
   /// Accumulated time since last spawn decision.
   double _accumulator = 0.0;
 
@@ -40,6 +54,7 @@ class SpawnManager {
     required this.config,
     required this.forbiddenShape,
     required this.random,
+    this.script,
   });
 
   /// Whether the game is still in the warmup window (FR-18).
@@ -59,6 +74,11 @@ class SpawnManager {
     _elapsed += dt;
     _accumulator += dt;
     _secondsSinceLastForbidden += dt;
+
+    // Scripted (tutorial) mode fully overrides random/warmup/guarantee logic.
+    if (script != null) {
+      return _tickScripted(dt);
+    }
 
     final double spawnInterval = 1.0 / config.spawnRate;
 
@@ -109,6 +129,41 @@ class SpawnManager {
     );
   }
 
+  /// Drives spawn decisions from the optional [script] (tutorial Stage 7).
+  ///
+  /// Emits one [SpawnScriptEntry] at a time, in order, once its [delay] has
+  /// elapsed since the previous scripted spawn. Returns [SpawnDecision.skip]
+  /// while waiting and once the script is exhausted. An entry's explicit
+  /// [SpawnScriptEntry.x] is carried through on the decision; when null the
+  /// caller falls back to [generateX]. Reference: Section 12.3.
+  SpawnDecision _tickScripted(double dt) {
+    final entries = script!.entries;
+    if (_scriptIndex >= entries.length) {
+      return SpawnDecision.skip();
+    }
+
+    _scriptTimer += dt;
+    final entry = entries[_scriptIndex];
+    if (_scriptTimer < entry.delay) {
+      return SpawnDecision.skip();
+    }
+
+    _scriptTimer = 0.0;
+    _scriptIndex++;
+
+    final bool isForbidden = entry.shapeType == forbiddenShape;
+    if (isForbidden) {
+      _secondsSinceLastForbidden = 0.0;
+    }
+
+    return SpawnDecision(
+      shouldSpawn: true,
+      shapeType: entry.shapeType,
+      isForbidden: isForbidden,
+      x: entry.x ?? 0.0,
+    );
+  }
+
   /// Generates a valid x-position that does not overlap with existing
   /// objects within [config.spawnOverlapRadius] (FR-20).
   ///
@@ -138,9 +193,12 @@ class SpawnManager {
     }
 
     // Fallback after 3 attempts: screen center ± random offset (up to 20 px either way)
-    // Reference: Risk 4 mitigation.
-    // ignore: avoid_print
-    print("WARNING: Spawn overlap check exceeded 3 attempts. Falling back to center position.");
+    // Reference: Risk 4 mitigation. Debug-only log to avoid spamming release output.
+    assert(() {
+      // ignore: avoid_print
+      print("WARNING: Spawn overlap check exceeded 3 attempts. Falling back to center position.");
+      return true;
+    }());
     final double center = gameWidth / 2 - objectSize / 2;
     final double offset = (random.nextDouble() - 0.5) * 40.0;
     return (center + offset).clamp(0.0, maxX);

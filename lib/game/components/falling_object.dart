@@ -31,11 +31,10 @@ class FallingObject extends PositionComponent with TapCallbacks {
   /// Level configuration providing fall speed, object size, etc.
   final LevelConfig levelConfig;
 
-  /// Colour used when this object is a correct (non-forbidden) shape.
-  final Color correctColor;
-
-  /// Colour used when this object is the forbidden shape.
-  final Color forbiddenColor;
+  /// Fill colour for the shape. Identical for forbidden and correct objects
+  /// so colour never reveals which shape is forbidden -- memory is the only
+  /// cue (Section 2.5, Section 4.2). [isForbidden] still drives tap logic.
+  final Color shapeColor;
 
   /// Called when the player correctly taps a non-forbidden object.
   final void Function(FallingObject) onCorrectTap;
@@ -75,8 +74,7 @@ class FallingObject extends PositionComponent with TapCallbacks {
     required this.shapeType,
     required this.isForbidden,
     required this.levelConfig,
-    required this.correctColor,
-    required this.forbiddenColor,
+    required this.shapeColor,
     required this.onCorrectTap,
     required this.onWrongTap,
     required this.onMissed,
@@ -126,7 +124,7 @@ class FallingObject extends PositionComponent with TapCallbacks {
   void render(Canvas canvas) {
     _paint
       ..style = PaintingStyle.fill
-      ..color = isForbidden ? forbiddenColor : correctColor;
+      ..color = shapeColor;
 
     _shapePainter.paintShape(
       canvas,

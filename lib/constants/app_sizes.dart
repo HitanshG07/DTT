@@ -23,7 +23,12 @@ class AppSizes {
   // --- HUD layout (Section 4.4) ---
 
   /// HUD bar height in logical pixels.
-  static const double kHudHeight = 56.0;
+  ///
+  /// Raised from the Section 4.4 nominal 56 px to fit the centre column's
+  /// 28 px score stacked over the 40 px combo-decay badge (kComboBadgeSize)
+  /// plus the right column's 36 px thumbnail and AVOID label. At 56 px the
+  /// content overflowed the bar by ~13 px ("BOTTOM OVERFLOWED").
+  static const double kHudHeight = 72.0;
 
   /// Heart icon size in logical pixels (24x24).
   static const double kHeartIconSize = 24.0;

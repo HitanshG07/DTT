@@ -18,6 +18,11 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   late final GameController _controller;
+  // Built exactly once (see didChangeDependencies). MUST NOT be constructed in
+  // build(): build() re-runs on every setState (pause/resume), and recreating
+  // the game would reset the pool, re-roll the forbidden shape, and reset the
+  // ScoreManager counters mid-round.
+  late final DttGame _game;
   bool _isPaused = false;
   bool _hasInitialised = false;
   bool _navigatingToGameOver = false;
@@ -33,6 +38,16 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         _controller = args as GameController;
       }
       _hasInitialised = true;
+
+      // Build the Flame game ONCE here, not in build(), so pause/resume
+      // (which call setState) never recreate it.
+      _game = DttGame(
+        controller: _controller,
+        levelConfig: _controller.levelConfig,
+        correctColor: AppColors.kCorrect,
+        forbiddenColor: AppColors.kWrong,
+        shapeColor: AppColors.kPrimaryText,
+      );
 
       // Add listener to lives to navigate to Game Over when lives reach 0 (Section 5.2)
       _controller.state.lives.addListener(_checkGameOver);
@@ -118,15 +133,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         body: SafeArea(
           child: Stack(
             children: [
-              // Layer 1: Flame GameWidget
-              GameWidget(
-                game: DttGame(
-                  controller: _controller,
-                  levelConfig: _controller.levelConfig,
-                  correctColor: AppColors.kCorrect,
-                  forbiddenColor: AppColors.kWrong,
-                ),
-              ),
+              // Layer 1: Flame GameWidget (game built once in didChangeDependencies)
+              GameWidget(game: _game),
 
               // Layer 2: HUD Overlay at top
               Positioned(

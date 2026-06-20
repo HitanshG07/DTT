@@ -26,6 +26,7 @@ void main() {
         levelConfig: controller.levelConfig,
         correctColor: Colors.green,
         forbiddenColor: Colors.red,
+        shapeColor: Colors.white,
       );
 
       await tester.pumpWidget(
@@ -74,6 +75,7 @@ void main() {
         levelConfig: controller.levelConfig,
         correctColor: Colors.green,
         forbiddenColor: Colors.red,
+        shapeColor: Colors.white,
       );
 
       await tester.pumpWidget(
@@ -120,6 +122,7 @@ void main() {
         levelConfig: controller.levelConfig,
         correctColor: Colors.green,
         forbiddenColor: Colors.red,
+        shapeColor: Colors.white,
       );
 
       await tester.pumpWidget(
@@ -168,6 +171,7 @@ void main() {
         levelConfig: controller.levelConfig,
         correctColor: Colors.green,
         forbiddenColor: Colors.red,
+        shapeColor: Colors.white,
       );
 
       await tester.pumpWidget(
@@ -201,6 +205,7 @@ void main() {
         levelConfig: controller.levelConfig,
         correctColor: Colors.green,
         forbiddenColor: Colors.red,
+        shapeColor: Colors.white,
       );
 
       bool notifierUpdated = false;
