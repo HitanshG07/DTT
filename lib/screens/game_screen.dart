@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../game/dtt_game.dart';
 import '../game/game_controller.dart';
+import '../constants/app_sizes.dart';
+import '../overlays/countdown_bar.dart';
 import '../overlays/hud_overlay.dart';
+import '../overlays/memory_checkpoint_overlay.dart';
 import '../overlays/pause_overlay.dart';
 
 /// Game Screen (S-06) representing the active gameplay layout.
@@ -26,6 +29,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   bool _isPaused = false;
   bool _hasInitialised = false;
   bool _navigatingToGameOver = false;
+  // True once the round timer has been seeded (>0), so the initial 0.0 value of
+  // timeRemaining isn't mistaken for "time up". 2.0 Burst mode (§4).
+  bool _timerStarted = false;
+  // Mirrors GameState.checkpointActive to show/hide the recall modal (§6).
+  bool _checkpointActive = false;
 
   @override
   void didChangeDependencies() {
@@ -51,6 +59,19 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
       // Add listener to lives to navigate to Game Over when lives reach 0 (Section 5.2)
       _controller.state.lives.addListener(_checkGameOver);
+      // Burst mode also ends the round when the countdown timer hits 0 (§4).
+      _controller.state.timeRemaining.addListener(_checkTimeUp);
+      // Memory checkpoints show/hide the recall modal (§6).
+      _controller.state.checkpointActive.addListener(_onCheckpointChanged);
+    }
+  }
+
+  void _onCheckpointChanged() {
+    final bool active = _controller.state.checkpointActive.value;
+    if (active != _checkpointActive) {
+      setState(() {
+        _checkpointActive = active;
+      });
     }
   }
 
@@ -91,6 +112,32 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// Navigates to Game Over when the Burst-mode round timer reaches 0.
+  ///
+  /// Ignores the initial 0.0 of [GameState.timeRemaining]: only once the timer
+  /// has been seeded (>0) does a subsequent 0 count as time-up. Reference: §4.
+  void _checkTimeUp() {
+    final double remaining = _controller.state.timeRemaining.value;
+    if (remaining > 0) {
+      _timerStarted = true;
+      return;
+    }
+    if (_timerStarted && !_navigatingToGameOver) {
+      _navigatingToGameOver = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(
+          context,
+          '/game-over',
+          arguments: {
+            'score': _controller.state.score.value,
+            'controller': _controller,
+          },
+        );
+      });
+    }
+  }
+
   @override
   void dispose() {
     // Mandatory disposal order (Section 7.2 / Section 5.2):
@@ -100,6 +147,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     if (_hasInitialised) {
       _controller.state.lives.removeListener(_checkGameOver);
+      _controller.state.timeRemaining.removeListener(_checkTimeUp);
+      _controller.state.checkpointActive.removeListener(_onCheckpointChanged);
       _controller.state.dispose(); // ValueNotifier disposal rule (Section 7.2)
       _controller.dispose();
     }
@@ -144,6 +193,14 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                 child: HudOverlay(controller: _controller),
               ),
 
+              // Layer 2b: Burst-mode round countdown bar, directly below the HUD.
+              Positioned(
+                top: AppSizes.kHudHeight,
+                left: 0,
+                right: 0,
+                child: CountdownBar(controller: _controller),
+              ),
+
               // Pause button in bottom right (Section 11.4)
               Positioned(
                 bottom: 16.0,
@@ -183,6 +240,20 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                   ),
                 ),
               ),
+
+              // Layer 5: Memory checkpoint recall modal (§6). Blocks gameplay
+              // (the game is also paused) until the player submits an answer.
+              if (_checkpointActive && _game.activeCheckpoint != null)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black87,
+                    alignment: Alignment.center,
+                    child: MemoryCheckpointOverlay(
+                      prompt: _game.activeCheckpoint!,
+                      onSubmit: (selected) => _game.resolveCheckpoint(selected),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

@@ -1,93 +1,146 @@
-﻿import 'package:dont_tap_that/game/config/level_registry.dart';
+import 'package:dont_tap_that/game/config/level_generator.dart';
+import 'package:dont_tap_that/game/config/level_registry.dart';
 import 'package:dont_tap_that/game/config/shape_type.dart';
+import 'package:dont_tap_that/game/config/star_thresholds.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// Phase 4A: the registry is now generated (sawtooth curve + flavors + caps).
+/// We assert **curve invariants** rather than hand-typed magic numbers.
 void main() {
-  group('LevelRegistry', () {
-    test('forLevel(1) returns fallSpeed 120 and objectSize 48', () {
-      final config = LevelRegistry.forLevel(1);
-      expect(config.fallSpeed, 120);
-      expect(config.objectSize, 48);
+  group('LevelRegistry (generated, 30 levels)', () {
+    test('there are exactly 30 levels', () {
+      expect(LevelRegistry.levelCount, 30);
+      expect(LevelRegistry.levels.length, 30);
     });
 
-    test('forLevel(5) returns fallSpeed 320 and objectSize 36', () {
-      final config = LevelRegistry.forLevel(5);
-      expect(config.fallSpeed, 320);
-      expect(config.objectSize, 36);
+    test('forLevel clamps out-of-range to [1, 30]', () {
+      expect(LevelRegistry.forLevel(0).objectSize,
+          LevelRegistry.forLevel(1).objectSize);
+      expect(LevelRegistry.forLevel(99).objectSize,
+          LevelRegistry.forLevel(30).objectSize);
     });
 
-    test('forLevel(99) clamps to Level 5 (ceiling rule)', () {
-      final config = LevelRegistry.forLevel(99);
-      final level5 = LevelRegistry.forLevel(5);
-      expect(config.fallSpeed, level5.fallSpeed);
-      expect(config.objectSize, level5.objectSize);
-      expect(config.maxObjects, level5.maxObjects);
-      expect(config.spawnRate, level5.spawnRate);
+    test('L1 is the easiest, L30 the hardest (endpoints)', () {
+      final l1 = LevelRegistry.forLevel(1);
+      final l30 = LevelRegistry.forLevel(30);
+      expect(l1.objectSize, greaterThan(l30.objectSize));
+      expect(l1.shapes.length, 3);
+      expect(l30.shapes.length, 7);
     });
 
-    test('forLevel(3).shapes contains ShapeType.star', () {
-      final config = LevelRegistry.forLevel(3);
-      expect(config.shapes, contains(ShapeType.star));
-    });
-
-    test('forLevel(0) clamps to Level 1', () {
-      final config = LevelRegistry.forLevel(0);
-      final level1 = LevelRegistry.forLevel(1);
-      expect(config.fallSpeed, level1.fallSpeed);
-    });
-
-    test('Level 1 has 3 shape types', () {
-      final config = LevelRegistry.forLevel(1);
-      expect(config.shapes.length, 3);
-    });
-
-    test('Level 5 has 7 shape types (all shapes)', () {
-      final config = LevelRegistry.forLevel(5);
-      expect(config.shapes.length, 7);
-    });
-
-    test('Level 4 has forbiddenChanges true with 30 s interval', () {
-      final config = LevelRegistry.forLevel(4);
-      expect(config.forbiddenChanges, isTrue);
-      expect(config.forbiddenInterval, 30);
-    });
-
-    test('Level 5 has forbiddenChanges true with 20 s interval', () {
-      final config = LevelRegistry.forLevel(5);
-      expect(config.forbiddenChanges, isTrue);
-      expect(config.forbiddenInterval, 20);
-    });
-
-    test('Levels 1-3 have forbiddenChanges false', () {
-      for (var level = 1; level <= 3; level++) {
-        final config = LevelRegistry.forLevel(level);
-        expect(config.forbiddenChanges, isFalse,
-            reason: 'Level $level should not have forbidden changes');
+    test('sawtooth: difficulty rises within a world but dips at world starts', () {
+      // Within each world (5 levels) difficulty strictly increases...
+      for (int w = 0; w < 6; w++) {
+        for (int i = 0; i < 4; i++) {
+          final a = LevelGenerator.difficultyFor(w * 5 + i + 1);
+          final b = LevelGenerator.difficultyFor(w * 5 + i + 2);
+          expect(b, greaterThan(a), reason: 'world $w level $i→${i + 1}');
+        }
+      }
+      // ...but each new world starts easier than the previous world's peak.
+      for (int w = 1; w < 6; w++) {
+        final prevPeak = LevelGenerator.difficultyFor(w * 5); // last of prev world
+        final newStart = LevelGenerator.difficultyFor(w * 5 + 1); // first of new
+        expect(newStart, lessThan(prevPeak), reason: 'breather at world $w');
       }
     });
 
-    test('All levels have default warmupDurationSeconds of 12', () {
-      for (var level = 1; level <= 5; level++) {
-        final config = LevelRegistry.forLevel(level);
-        expect(config.warmupDurationSeconds, 12);
+    test('object size is non-increasing within each world (size not flavored)', () {
+      for (int w = 0; w < 6; w++) {
+        for (int i = 0; i < 4; i++) {
+          final a = LevelRegistry.forLevel(w * 5 + i + 1).objectSize;
+          final b = LevelRegistry.forLevel(w * 5 + i + 2).objectSize;
+          expect(b, lessThanOrEqualTo(a));
+        }
       }
     });
 
-    test('All levels have default idleDecaySeconds of 4.0', () {
-      for (var level = 1; level <= 5; level++) {
-        final config = LevelRegistry.forLevel(level);
-        expect(config.idleDecaySeconds, 4.0);
+    test('shape count is monotonic non-decreasing 3→7', () {
+      int prev = 0;
+      for (int n = 1; n <= 30; n++) {
+        final c = LevelRegistry.forLevel(n).shapes.length;
+        expect(c, greaterThanOrEqualTo(prev));
+        expect(c, inInclusiveRange(3, 7));
+        prev = c;
+      }
+      // bomb is never a normal shape in the pool.
+      for (int n = 1; n <= 30; n++) {
+        expect(LevelRegistry.forLevel(n).shapes.contains(ShapeType.bomb), isFalse);
       }
     });
 
-    test('Level 2 spawnRate is 0.7 and maxObjects is 5', () {
-      final config = LevelRegistry.forLevel(2);
-      expect(config.spawnRate, 0.7);
-      expect(config.maxObjects, 5);
+    group('mechanic breakpoints', () {
+      test('bombs only from L4', () {
+        for (int n = 1; n <= 3; n++) {
+          expect(LevelRegistry.forLevel(n).bombChance, 0.0, reason: 'L$n');
+        }
+        for (int n = 4; n <= 30; n++) {
+          expect(LevelRegistry.forLevel(n).bombChance, greaterThan(0.0), reason: 'L$n');
+        }
+      });
+
+      test('forbidden rotation only from L13', () {
+        for (int n = 1; n <= 12; n++) {
+          expect(LevelRegistry.forLevel(n).forbiddenChanges, isFalse, reason: 'L$n');
+        }
+        for (int n = 13; n <= 30; n++) {
+          expect(LevelRegistry.forLevel(n).forbiddenChanges, isTrue, reason: 'L$n');
+        }
+      });
+
+      test('checkpoints only from L9; order-recall only from L21', () {
+        for (int n = 1; n <= 8; n++) {
+          expect(LevelRegistry.forLevel(n).checkpoint.enabled, isFalse, reason: 'L$n');
+        }
+        for (int n = 9; n <= 30; n++) {
+          final cp = LevelRegistry.forLevel(n).checkpoint;
+          expect(cp.enabled, isTrue, reason: 'L$n');
+          expect(cp.orderMatters, n >= 21, reason: 'L$n order');
+        }
+      });
     });
 
-    test('Registry has exactly 5 levels', () {
-      expect(LevelRegistry.levels.length, 5);
+    group('human-possible hard caps (every level)', () {
+      test('lifetime ≥ 1.1s, bomb ≤ 0.30, rotation ≥ 12s, recall ≤ 4', () {
+        for (int n = 1; n <= 30; n++) {
+          final c = LevelRegistry.forLevel(n);
+          expect(c.objectLifetime, greaterThanOrEqualTo(1.1), reason: 'L$n lifetime');
+          expect(c.bombChance, lessThanOrEqualTo(0.30), reason: 'L$n bomb');
+          if (c.forbiddenChanges) {
+            expect(c.forbiddenInterval, greaterThanOrEqualTo(12), reason: 'L$n rot');
+          }
+          expect(c.checkpoint.recallCount, lessThanOrEqualTo(4), reason: 'L$n recall');
+          expect(c.objectSize, inInclusiveRange(32, 52), reason: 'L$n size');
+          expect(c.waveSize, lessThanOrEqualTo(c.maxObjects), reason: 'L$n wave');
+        }
+      });
+    });
+
+    group('star thresholds', () {
+      test('every level has ascending one<two<three cutoffs', () {
+        for (int n = 1; n <= 30; n++) {
+          final s = LevelRegistry.forLevel(n).starThresholds;
+          expect(s.one, lessThan(s.two));
+          expect(s.two, lessThan(s.three));
+        }
+      });
+
+      test('starsFor maps score to the right tier', () {
+        const s = StarThresholds(one: 100, two: 200, three: 300);
+        expect(s.starsFor(50), 0);
+        expect(s.starsFor(100), 1);
+        expect(s.starsFor(250), 2);
+        expect(s.starsFor(300), 3);
+        expect(s.starsFor(999), 3);
+      });
+
+      test('override map wins over the generated baseline', () {
+        const override = {5: StarThresholds(one: 1, two: 2, three: 3)};
+        const gen = LevelGenerator(starOverrides: override);
+        expect(gen.forLevel(5).starThresholds.one, 1);
+        // a non-overridden level keeps the baseline (not 1/2/3).
+        expect(gen.forLevel(6).starThresholds.one, isNot(1));
+      });
     });
   });
 }

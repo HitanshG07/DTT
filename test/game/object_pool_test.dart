@@ -22,10 +22,10 @@ const _testConfig = LevelConfig(
 
 void main() {
   group('ObjectPool', () {
-    late ObjectPool pool;
+    late ObjectPool<FallingObject> pool;
 
     setUp(() {
-      pool = ObjectPool(
+      pool = ObjectPool<FallingObject>(
         poolSize: GameConstants.kMaxPoolSize,
         createObject: (index) => FallingObject(
           shapeType: ShapeType.circle,

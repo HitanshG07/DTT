@@ -5,6 +5,7 @@ import '../constants/app_colors.dart';
 import '../constants/app_fonts.dart';
 import '../game/game_controller.dart';
 import '../services/score_service.dart';
+import '../services/progress_service.dart';
 import 'forbidden_intro_screen.dart';
 
 /// Game Over Screen (S-08) showing final results and performance metrics.
@@ -21,14 +22,15 @@ class GameOverScreen extends StatefulWidget {
 
 class _GameOverScreenState extends State<GameOverScreen> {
   final ScoreService _scoreService = ScoreService();
+  final ProgressService _progressService = ProgressService();
   bool _retryEnabled = false;
   int _bestScore = 0;
   bool _isNewBest = false;
+  int _starsEarned = 0;
   Timer? _retryTimer;
   bool _argsParsed = false;
 
   late int _finalScore;
-  // ignore: unused_field
   late GameController _controller;
   double? _accuracy;
   late int _longestStreak;
@@ -51,9 +53,15 @@ class _GameOverScreenState extends State<GameOverScreen> {
           ? args['longestStreak'] as int
           : _controller.longestStreak;
 
+      // Stars earned this round = score graded against this level's thresholds
+      // (2.0 Phase 4B). Persisted best-of via ProgressService.
+      _starsEarned =
+          _controller.levelConfig.starThresholds.starsFor(_finalScore);
+
       _argsParsed = true;
 
       _saveAndLoadScores();
+      _progressService.saveStars(_controller.level, _starsEarned);
     }
   }
 
@@ -170,6 +178,26 @@ class _GameOverScreenState extends State<GameOverScreen> {
                   ),
                 ),
               ],
+
+              const SizedBox(height: 20.0),
+              // Stars earned this round (2.0 Phase 4B): 3 tiers, filled by score.
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(3, (i) {
+                  final bool earned = i < _starsEarned;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                    child: Icon(
+                      earned ? Icons.star_rounded : Icons.star_border_rounded,
+                      size: 44.0,
+                      color: earned
+                          ? const Color(0xFFF5B301)
+                          : AppColors.kSecondaryText,
+                    ),
+                  );
+                }),
+              ),
+
               const Spacer(flex: 2),
 
               // 3-column stats row

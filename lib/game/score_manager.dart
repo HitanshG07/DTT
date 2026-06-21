@@ -96,15 +96,18 @@ class ScoreManager {
     _state.decayProgress.value = 1.0;
   }
 
-  /// Processes a wrong (forbidden) tap.
+  /// Processes a penalised tap (forbidden shape or bomb) *without* touching
+  /// lives — the combo/accuracy half of a mis-tap, shared by both economies.
   ///
-  /// 1. Increments total tap counter (wrong tap counts as a tap).
+  /// 1. Increments total tap counter (a mis-tap still counts as a tap).
   /// 2. Resets idle decay timer.
   /// 3. Resets combo consecutive counter.
   /// 4. Resets multiplier to x1 (FR-06, Section 2.3).
-  /// 5. Deducts one life.
-  /// 6. Resets current streak.
-  void onWrongTap() {
+  /// 5. Resets current streak.
+  ///
+  /// In 2.0 Burst mode the *cost* is time (handled by the game via
+  /// [TimerManager], not here). In 1.x/Zen mode [onWrongTap] adds the life loss.
+  void onPenaltyTap() {
     if (_disposed) return;
     _totalTapped++;
     _idleDecayTimer = 0.0;
@@ -112,15 +115,22 @@ class ScoreManager {
     _previousMultiplier = _multiplier;
     _consecutive = 0;
 
-    // Forbidden tap resets the multiplier all the way to x1 (FR-06, Section 2.3),
-    // not a single-step decrement.
+    // Forbidden/bomb tap resets the multiplier all the way to x1 (FR-06,
+    // Section 2.3), not a single-step decrement.
     _multiplier = 1;
     _state.multiplier.value = _multiplier;
 
-    _state.lives.value -= 1;
-
-    // Streak resets on wrong tap.
+    // Streak resets on a mis-tap.
     _currentStreak = 0;
+  }
+
+  /// Processes a wrong (forbidden) tap in the lives-based economy: the combo
+  /// reset of [onPenaltyTap] plus a life deduction (FR-06, Section 2.3). Used
+  /// by the 1.x falling / Zen path.
+  void onWrongTap() {
+    if (_disposed) return;
+    onPenaltyTap();
+    _state.lives.value -= 1;
   }
 
   /// Processes a missed object (fell off screen without being tapped).

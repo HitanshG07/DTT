@@ -261,4 +261,106 @@ void main() {
       expect(manager.tick(5.0).shouldSpawn, isFalse);
     });
   });
+
+  group('SpawnManager wave mode (2.0 Burst, §4)', () {
+    test('after warmup, tickWave emits exactly config.waveSize decisions (4-6)', () {
+      final manager = SpawnManager(
+        config: _testConfig, // waveSize defaults to 5
+        forbiddenShape: ShapeType.square,
+        random: _FixedRandom(intSequence: [0, 1, 2]),
+      );
+
+      // Skip warmup (12 s) and trigger a wave (spawnInterval = 2 s).
+      final wave = manager.tickWave(13.0);
+      expect(wave.length, equals(_testConfig.waveSize));
+      expect(wave.length, inInclusiveRange(4, 6));
+      for (final d in wave) {
+        expect(d.shouldSpawn, isTrue);
+      }
+    });
+
+    test('during warmup, tickWave emits at most one non-forbidden object', () {
+      final manager = SpawnManager(
+        config: _testConfig,
+        forbiddenShape: ShapeType.circle, // index 0 would pick circle
+        random: _FixedRandom(intSequence: [0, 0, 0, 0]),
+      );
+
+      // Within warmup window; spawnInterval = 2 s.
+      final wave = manager.tickWave(2.0);
+      expect(wave.length, lessThanOrEqualTo(1));
+      for (final d in wave) {
+        expect(d.isForbidden, isFalse,
+            reason: 'No forbidden objects may spawn during warmup');
+        expect(d.shapeType, isNot(ShapeType.circle));
+      }
+    });
+
+    test('every decision in a wave is forbidden iff its shape is the forbidden shape', () {
+      final manager = SpawnManager(
+        config: _testConfig, // shapes: circle, square, triangle
+        forbiddenShape: ShapeType.square,
+        random: _FixedRandom(intSequence: [0, 1, 2]),
+      );
+
+      // Drive several post-warmup waves so the random index cycles all shapes.
+      manager.tickWave(13.0);
+      for (int i = 0; i < 10; i++) {
+        final wave = manager.tickWave(2.0);
+        for (final d in wave) {
+          expect(d.isForbidden, equals(d.shapeType == ShapeType.square),
+              reason: 'isForbidden must match shapeType == forbiddenShape '
+                  '(got ${d.shapeType}, isForbidden=${d.isForbidden})');
+        }
+      }
+    });
+
+    test('an overdue wave includes exactly one guaranteed forbidden (FR-19)', () {
+      final manager = SpawnManager(
+        config: _testConfig,
+        forbiddenShape: ShapeType.triangle,
+        // index 0 = circle (non-forbidden) for every non-forced slot.
+        random: _FixedRandom(intSequence: [0]),
+      );
+
+      // 13 s since start (> 8 s guarantee) -> first wave forces one forbidden.
+      final wave = manager.tickWave(13.0);
+      final forbiddenCount = wave.where((d) => d.isForbidden).length;
+      expect(forbiddenCount, equals(1));
+      expect(wave.first.shapeType, equals(ShapeType.triangle));
+    });
+
+    test('generate2DPosition avoids points within spawnOverlapRadius (FR-20, 2D)', () {
+      final manager = SpawnManager(
+        config: _testConfig, // spawnOverlapRadius = 60, objectSize = 48
+        forbiddenShape: ShapeType.circle,
+        // Attempt 1 lands near the existing point (rejected); attempt 2 is far.
+        random: _FixedRandom(
+          doubleSequence: [0.02, 0.02, 0.9, 0.9],
+        ),
+      );
+
+      // Play area 400x400, maxX = maxY = 352. Existing object at (10, 10).
+      // Attempt 1: (~7, ~7) -> within 60 of (10,10) -> rejected.
+      // Attempt 2: (~317, ~317) -> far -> accepted.
+      final (x, y) = manager.generate2DPosition([10.0], [10.0], 400.0, 400.0);
+      final double dist =
+          ((x - 10.0) * (x - 10.0) + (y - 10.0) * (y - 10.0));
+      expect(dist, greaterThanOrEqualTo(60.0 * 60.0));
+    });
+
+    test('generate2DPosition keeps points inside the play rect with areaTop', () {
+      final manager = SpawnManager(
+        config: _testConfig,
+        forbiddenShape: ShapeType.circle,
+        random: _FixedRandom(doubleSequence: [0.5, 0.5]),
+      );
+
+      const double areaTop = 88.0;
+      final (x, y) =
+          manager.generate2DPosition([], [], 400.0, 300.0, areaTop: areaTop);
+      expect(x, inInclusiveRange(0.0, 400.0 - _testConfig.objectSize));
+      expect(y, inInclusiveRange(areaTop, areaTop + 300.0 - _testConfig.objectSize));
+    });
+  });
 }

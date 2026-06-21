@@ -20,6 +20,9 @@ class RealGameController implements GameController {
   final GameState state = GameState();
 
   @override
+  final int level;
+
+  @override
   final LevelConfig levelConfig;
 
   late final ScoreManager scoreManager;
@@ -29,12 +32,17 @@ class RealGameController implements GameController {
   final AudioService? audioService;
   final HapticsService? hapticsService;
 
+  /// "Reduce flashing" accessibility setting (2.0 §5). When true, the White
+  /// Blast downgrades to an edge vignette. Read from prefs at construction.
+  final bool reduceFlashing;
+
   DttGame? game;
 
   RealGameController({
-    int level = 1,
+    this.level = 1,
     this.audioService,
     this.hapticsService,
+    this.reduceFlashing = false,
   }) : levelConfig = LevelRegistry.forLevel(level) {
     scoreManager = ScoreManager(state);
     lifeManager = LifeManager(state.lives, onRoundEnd: _handleRoundEnd);

@@ -129,6 +129,135 @@ class SpawnManager {
     );
   }
 
+  /// Advances the spawn timer by [dt] and returns a **wave** of decisions for
+  /// 2.0 Burst mode (DTT_2.0_ROADMAP.md §4, Phase 1).
+  ///
+  /// Returns an empty list when no spawn is due this tick. When due, returns
+  /// [config.waveSize] decisions (one full wave). The caller assigns each a 2D
+  /// position via [generate2DPosition] and caps the total against the pool /
+  /// [config.maxObjects].
+  ///
+  /// Preserves the 1.x invariants: warmup behaves like the single-spawn path
+  /// (max 2 concurrent, never forbidden, FR-18); the forbidden-guarantee
+  /// (FR-19) forces exactly one forbidden into the wave when overdue; and
+  /// **`isForbidden` is true iff `shapeType == forbiddenShape`** for every
+  /// decision (FR-13).
+  List<SpawnDecision> tickWave(double dt) {
+    _elapsed += dt;
+    _accumulator += dt;
+    _secondsSinceLastForbidden += dt;
+
+    // Scripted (tutorial) mode emits single-item waves.
+    if (script != null) {
+      final d = _tickScripted(dt);
+      return d.shouldSpawn ? <SpawnDecision>[d] : const <SpawnDecision>[];
+    }
+
+    final double spawnInterval = 1.0 / config.spawnRate;
+    if (_accumulator < spawnInterval) {
+      return const <SpawnDecision>[];
+    }
+    _accumulator -= spawnInterval;
+
+    // Warmup: single non-forbidden object, max 2 concurrent (FR-18).
+    if (isInWarmup) {
+      if (_activeCount >= 2) return const <SpawnDecision>[];
+      return <SpawnDecision>[
+        SpawnDecision(
+          shouldSpawn: true,
+          shapeType: _pickNonForbiddenShape(),
+          isForbidden: false,
+          x: 0.0,
+        ),
+      ];
+    }
+
+    // Full wave.
+    final decisions = <SpawnDecision>[];
+    bool needForbidden =
+        _secondsSinceLastForbidden >= config.forbiddenGuaranteeInterval;
+
+    for (int i = 0; i < config.waveSize; i++) {
+      ShapeType shape;
+      bool isForbidden;
+      if (needForbidden) {
+        // FR-19: force exactly one guaranteed forbidden per overdue wave.
+        shape = forbiddenShape;
+        isForbidden = true;
+        needForbidden = false;
+        _secondsSinceLastForbidden = 0.0;
+      } else if (config.bombChance > 0 &&
+          random.nextDouble() < config.bombChance) {
+        // Bomb hazard (§5): always-salient, never the forbidden shape. The
+        // `> 0` guard means bomb-free configs consume no randomness here, so
+        // the falling/Phase-1 wave behaviour is unchanged.
+        shape = ShapeType.bomb;
+        isForbidden = false;
+      } else {
+        shape = config.shapes[random.nextInt(config.shapes.length)];
+        isForbidden = shape == forbiddenShape;
+        if (isForbidden) _secondsSinceLastForbidden = 0.0;
+      }
+      decisions.add(SpawnDecision(
+        shouldSpawn: true,
+        shapeType: shape,
+        isForbidden: isForbidden,
+        x: 0.0,
+      ));
+    }
+    return decisions;
+  }
+
+  /// Generates a valid 2D spawn point that does not overlap existing objects
+  /// within [config.spawnOverlapRadius] (FR-20, 2D variant of [generateX]).
+  ///
+  /// [existingX]/[existingY] are parallel lists of active object positions.
+  /// The point is placed inside the play rect `[0,areaWidth) x [areaTop,
+  /// areaTop+areaHeight)`. Tries up to 3 positions, then falls back to the play
+  /// area centre with a small jitter. Returns `(x, y)`. Pure Dart -- no Flame.
+  (double, double) generate2DPosition(
+    List<double> existingX,
+    List<double> existingY,
+    double areaWidth,
+    double areaHeight, {
+    double areaTop = 0.0,
+  }) {
+    final double objectSize = config.objectSize.toDouble();
+    final double maxX = areaWidth - objectSize;
+    final double maxY = areaHeight - objectSize;
+    if (maxX <= 0 || maxY <= 0) {
+      return (0.0, areaTop);
+    }
+
+    for (int attempt = 0; attempt < 3; attempt++) {
+      final double cx = random.nextDouble() * maxX;
+      final double cy = areaTop + random.nextDouble() * maxY;
+      bool overlaps = false;
+      for (int j = 0; j < existingX.length; j++) {
+        final double dx = cx - existingX[j];
+        final double dy = cy - existingY[j];
+        if (sqrt(dx * dx + dy * dy) < config.spawnOverlapRadius) {
+          overlaps = true;
+          break;
+        }
+      }
+      if (!overlaps) return (cx, cy);
+    }
+
+    // Fallback after 3 attempts: play-area centre ± small jitter (Risk-4).
+    assert(() {
+      // ignore: avoid_print
+      print("WARNING: 2D spawn overlap check exceeded 3 attempts. Falling back to centre.");
+      return true;
+    }());
+    final double cx =
+        (maxX / 2 + (random.nextDouble() - 0.5) * 40.0).clamp(0.0, maxX);
+    final double cy =
+        (areaTop + maxY / 2 + (random.nextDouble() - 0.5) * 40.0)
+            .clamp(areaTop, areaTop + maxY);
+    return (cx, cy);
+  }
+
   /// Drives spawn decisions from the optional [script] (tutorial Stage 7).
   ///
   /// Emits one [SpawnScriptEntry] at a time, in order, once its [delay] has

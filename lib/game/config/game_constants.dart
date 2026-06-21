@@ -61,4 +61,23 @@ class GameConstants {
 
   /// Starting lives per round (Section 2.4, FR-05).
   static const int kLives = 3;
+
+  // --- 2.0 Spatial Burst (DTT_2.0_ROADMAP.md §4, Phase 1) ---
+
+  /// Logical px reserved at the top of the burst play area so objects never
+  /// spawn behind the HUD bar (72 px) + the countdown bar. The HUD is a Flutter
+  /// overlay drawn over the full-screen GameWidget, so the engine must avoid it.
+  static const double kBurstPlayAreaTopInset = 88.0;
+
+  /// Logical px reserved at the bottom of the burst play area (clears the pause
+  /// button and SafeArea inset).
+  static const double kBurstPlayAreaBottomInset = 72.0;
+
+  /// Seconds subtracted from the round clock when the forbidden shape is tapped
+  /// (2.0 time economy, §5). Replaces the 1.x life loss in Burst mode.
+  static const double kForbiddenTimePenalty = 2.0;
+
+  /// Seconds subtracted from the round clock when a bomb is tapped (§5). Bombs
+  /// cost more than the forbidden shape because they are always-salient.
+  static const double kBombTimePenalty = 4.0;
 }

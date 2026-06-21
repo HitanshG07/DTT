@@ -12,9 +12,10 @@ import 'dart:ui';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart' show TextStyle;
 
-import 'components/falling_object.dart';
+import 'components/burst_object.dart';
 import 'components/tap_feedback_effect.dart';
 import 'config/game_constants.dart';
+import 'config/game_mode.dart';
 import 'config/level_config.dart';
 import 'config/shape_type.dart';
 import 'shapes/base_shape.dart';
@@ -22,6 +23,9 @@ import 'game_controller.dart';
 import 'object_pool.dart';
 import 'score_manager.dart';
 import 'spawn_manager.dart';
+import 'timer_manager.dart';
+import 'checkpoint_manager.dart';
+import 'config/checkpoint_spec.dart';
 import 'managers/forbidden_manager.dart';
 import 'real_game_controller.dart';
 import '../services/audio_service.dart';
@@ -34,6 +38,7 @@ import 'effects/ring_burst.dart';
 import 'effects/milestone_overlay_effect.dart';
 import 'effects/slow_motion_effect.dart';
 import 'effects/forbidden_change_warning.dart';
+import 'effects/white_blast_effect.dart';
 
 /// The main Flame game engine for Don't Tap That.
 ///
@@ -56,14 +61,26 @@ class DttGame extends FlameGame {
   /// Colour for the forbidden shape.
   final Color forbiddenColor;
 
-  /// Fill colour for falling shapes. Identical for forbidden and correct
-  /// objects so colour never reveals the forbidden shape (Section 2.5).
+  /// Fill colour for shapes. Identical for forbidden and correct objects so
+  /// colour never reveals the forbidden shape (Section 2.5).
   final Color shapeColor;
+
+  /// Active gameplay engine. Phase 1 ships [GameMode.burst]; [GameMode.zen]
+  /// (the preserved falling engine) is surfaced in Phase 5.
+  /// Reference: DTT_2.0_ROADMAP.md §2.1.
+  final GameMode gameMode;
 
   late SpawnManager _spawnManager;
   late ScoreManager _scoreManager;
-  late ObjectPool _pool;
+  late TimerManager _timerManager;
+  late CheckpointManager _checkpointManager;
+  late ObjectPool<BurstObject> _pool;
   late ShapeType _currentForbidden;
+
+  /// The recall challenge currently being presented, or null. Read by the
+  /// GameScreen to populate the [MemoryCheckpointOverlay] (2.0 Phase 3, §6).
+  CheckpointPrompt? _activeCheckpoint;
+  CheckpointPrompt? get activeCheckpoint => _activeCheckpoint;
 
   double _forbiddenChangeTimer = 0.0;
   bool _roundEnded = false;
@@ -71,6 +88,12 @@ class DttGame extends FlameGame {
 
   /// TimeScale lives on DttGame for wrong-tap slow-motion (FR-09, Section 6.4)
   double timeScale = 1.0;
+
+  /// "Reduce flashing" accessibility setting (2.0 §5): downgrades the bomb
+  /// White Blast to an edge vignette. Read once from the controller.
+  late final bool _reduceFlashing = (controller is RealGameController)
+      ? (controller as RealGameController).reduceFlashing
+      : false;
 
   /// Forbidden change warning active states (Section 4.6)
   bool _forbiddenWarningActive = false;
@@ -93,6 +116,7 @@ class DttGame extends FlameGame {
     required this.correctColor,
     required this.forbiddenColor,
     required this.shapeColor,
+    this.gameMode = GameMode.burst,
   }) {
     if (controller is RealGameController) {
       (controller as RealGameController).game = this;
@@ -125,9 +149,9 @@ class DttGame extends FlameGame {
     controller.state.forbiddenShape.value = _currentForbidden;
 
     // 2. Initialise object pool (Section 9).
-    _pool = ObjectPool(
+    _pool = ObjectPool<BurstObject>(
       poolSize: GameConstants.kMaxPoolSize,
-      createObject: (index) => _createFallingObject(),
+      createObject: (index) => _createBurstObject(),
     );
 
     // 3. Initialise spawn manager (Section 2.1, FR-18, FR-19, FR-20).
@@ -145,10 +169,24 @@ class DttGame extends FlameGame {
         ? (controller as RealGameController).scoreManager
         : ScoreManager(controller.state);
 
-    // 5. Round start audio cue (Section 6.2)
+    // 5. Round countdown timer (2.0 Burst, §4). Seeds GameState.timeRemaining
+    //    to the full round duration so the HUD shows a full bar immediately.
+    _timerManager = TimerManager(
+      state: controller.state,
+      roundDuration: levelConfig.roundDuration,
+    );
+
+    // 5b. Memory checkpoint manager (2.0 Phase 3, §6). Disabled levels make it
+    //     a no-op (assignToken/isDue always false).
+    _checkpointManager = CheckpointManager(
+      spec: levelConfig.checkpoint,
+      random: Random(),
+    );
+
+    // 6. Round start audio cue (Section 6.2)
     _audio?.play('round_start.ogg');
 
-    // 6. Reset forbidden change timer and count.
+    // 7. Reset forbidden change timer and count.
     _forbiddenChangeTimer = 0.0;
     _changeCount = 0;
   }
@@ -192,28 +230,84 @@ class DttGame extends FlameGame {
     // 2. Score manager tick (idle decay).
     _scoreManager.tick(dt);
 
-    // 3. Spawn logic.
+    // 3. Round timer (2.0 Burst, §4) + memory checkpoints (§6). Both are frozen
+    //    while a checkpoint modal is open (also enforced by paused). The round
+    //    ends when the clock hits 0; a checkpoint opens when one is due.
+    if (!_spawnManager.isInWarmup && !controller.state.checkpointActive.value) {
+      _timerManager.tick(dt);
+      if (_timerManager.isExpired) {
+        _endRound();
+        return;
+      }
+      _checkpointManager.tick(dt);
+      if (_checkpointManager.isDue) {
+        _openCheckpoint();
+        return;
+      }
+    }
+
+    // 4. Spawn logic -- emit a wave and scatter each object in 2D.
     _spawnManager.updateActiveCount(_pool.activeCount);
-    final decision = _spawnManager.tick(dt);
+    final wave = _spawnManager.tickWave(dt);
+    if (wave.isNotEmpty) {
+      _spawnWave(wave);
+    }
+  }
 
-    if (decision.shouldSpawn && _pool.activeCount < levelConfig.maxObjects) {
+  /// Spawns a wave of [BurstObject]s, scattering each at a non-overlapping 2D
+  /// position inside the play area (below the HUD bar). Capped by
+  /// [LevelConfig.maxObjects] and the pool size. Reference: §4 (Phase 1).
+  void _spawnWave(List<SpawnDecision> wave) {
+    const double top = GameConstants.kBurstPlayAreaTopInset;
+    final double areaHeight =
+        size.y - top - GameConstants.kBurstPlayAreaBottomInset;
+
+    // Active positions (mounted from earlier frames) for overlap avoidance.
+    final active = children.whereType<BurstObject>().toList();
+    final existingX = <double>[for (final o in active) o.position.x];
+    final existingY = <double>[for (final o in active) o.position.y];
+
+    // At most one special token-carrying target per wave (§6), spread over time.
+    bool tokenAssigned = false;
+
+    for (final decision in wave) {
+      if (_pool.activeCount >= levelConfig.maxObjects) break;
       final obj = _pool.acquire();
-      if (obj != null) {
-        final double xPos = _spawnManager.generateX(
-          _pool.activeXPositions,
-          size.x,
-        );
+      if (obj == null) break;
 
-        obj.reconfigure(
-          newShapeType: decision.shapeType,
-          newIsForbidden: decision.isForbidden,
-          newPosition: Vector2(xPos, -levelConfig.objectSize.toDouble()),
-          newSpeedMultiplier: 1.0,
-        );
+      final (x, y) = _spawnManager.generate2DPosition(
+        existingX,
+        existingY,
+        size.x,
+        areaHeight,
+        areaTop: top,
+      );
+      // Track within-wave so later objects in the same wave avoid this one.
+      existingX.add(x);
+      existingY.add(y);
 
-        if (!obj.isMounted) {
-          add(obj);
-        }
+      // The token rides a normal target (not a bomb / forbidden) so "specials"
+      // are things the player is meant to tap and remember. assignToken is only
+      // called for an eligible slot, so a recorded token is always rendered.
+      String? objToken;
+      if (!_spawnManager.isInWarmup &&
+          !tokenAssigned &&
+          !decision.isForbidden &&
+          decision.shapeType != ShapeType.bomb) {
+        objToken = _checkpointManager.assignToken();
+        if (objToken != null) tokenAssigned = true;
+      }
+
+      obj.reconfigure(
+        newShapeType: decision.shapeType,
+        newIsForbidden: decision.isForbidden,
+        newPosition: Vector2(x, y),
+        newLifetime: levelConfig.objectLifetime,
+        newToken: objToken,
+      );
+
+      if (!obj.isMounted) {
+        add(obj);
       }
     }
   }
@@ -342,17 +436,18 @@ class DttGame extends FlameGame {
     });
   }
 
-  /// Creates a new [FallingObject] for the pool. The object's shape
-  /// and position are set later via [FallingObject.reconfigure].
-  FallingObject _createFallingObject() {
-    final obj = FallingObject(
+  /// Creates a new [BurstObject] for the pool. The object's shape, position,
+  /// and lifetime are set later via [BurstObject.reconfigure].
+  BurstObject _createBurstObject() {
+    final obj = BurstObject(
       shapeType: ShapeType.circle,
       isForbidden: false,
       levelConfig: levelConfig,
       shapeColor: shapeColor,
       onCorrectTap: _onCorrectTap,
       onWrongTap: _onWrongTap,
-      onMissed: _onMissed,
+      onBombTap: _onBombTap,
+      onExpired: _onExpired,
     );
     // Pool release happens ONLY after Flame has fully removed the
     // component from the tree, preventing ghost-loop re-acquisition.
@@ -361,7 +456,7 @@ class DttGame extends FlameGame {
   }
 
   /// Handles a correct tap on a non-forbidden object.
-  void _onCorrectTap(FallingObject obj) {
+  void _onCorrectTap(BurstObject obj) {
     final int prevScore = controller.state.score.value;
     final int prevMultiplier = _scoreManager.multiplier;
 
@@ -403,7 +498,7 @@ class DttGame extends FlameGame {
     }
 
     // Check proximity warning (FR-15)
-    final forbiddenObjects = children.whereType<FallingObject>().where((o) => o.isForbidden);
+    final forbiddenObjects = children.whereType<BurstObject>().where((o) => o.isForbidden);
     for (final forbidden in forbiddenObjects) {
       if (ForbiddenManager.isWithinProximity(obj.position, forbidden.position)) {
         controller.state.proximityTrigger.value++;
@@ -450,32 +545,25 @@ class DttGame extends FlameGame {
     }
   }
 
-  /// Handles a wrong tap on the forbidden object.
-  void _onWrongTap(FallingObject obj) {
+  /// Handles a wrong tap on the forbidden object (2.0 time economy, §5).
+  ///
+  /// Burst mode costs **time, not lives**: tapping the forbidden shape resets
+  /// the combo (no life loss) and subtracts [GameConstants.kForbiddenTimePenalty]
+  /// from the round clock. If that drains the clock the round ends.
+  void _onWrongTap(BurstObject obj) {
     if (_roundEnded) return;
     final int prevMultiplier = _scoreManager.multiplier;
-    final int prevLives = controller.state.lives.value;
 
     // wrongtap.ogg fires immediately on the tap event (Reviewer Addition 1)
     _audio?.play('wrong_tap.ogg');
     _haptics?.wrong();
 
-    _scoreManager.onWrongTap();
+    _scoreManager.onPenaltyTap();
+    _timerManager.addTime(-GameConstants.kForbiddenTimePenalty);
 
-    final int newLives = controller.state.lives.value;
-    if (newLives < prevLives) {
-      // lifelost.ogg fires when LifeManager/lives updates confirm life deduction (Reviewer Addition 1)
-      _audio?.play('life_lost.ogg');
-      _haptics?.lifeLost();
-    }
-
-    // Red screen flash
+    // Red screen flash + shake + slow motion.
     add(ScreenFlash(color: forbiddenColor));
-
-    // Screen shake
     add(ScreenShake());
-
-    // Slow motion effect
     add(SlowMotionEffect());
 
     // Check combo break.
@@ -483,8 +571,8 @@ class DttGame extends FlameGame {
       _audio?.play('combo_break.ogg');
     }
 
-    // Check game over.
-    if (controller.state.lives.value <= 0) {
+    // Penalty may have drained the clock -> end the round.
+    if (_timerManager.isExpired) {
       _endRound();
     }
 
@@ -496,12 +584,68 @@ class DttGame extends FlameGame {
     ));
   }
 
-  /// Handles an object that fell off the screen without being tapped.
-  void _onMissed(FallingObject obj) {
-    // Missed correct objects drop the combo multiplier one step; forbidden
-    // objects falling off are exempt (FR-06, Section 2.3). No audio, no life
-    // change.
-    _scoreManager.onMissed(obj.isForbidden);
+  /// Handles a tap on a bomb (always-salient hazard, §5).
+  ///
+  /// Costs more time than the forbidden shape
+  /// ([GameConstants.kBombTimePenalty]), resets the combo, and fires the capped
+  /// [WhiteBlastEffect] (downgraded to an edge vignette when "Reduce flashing"
+  /// is on). Bombs are never the forbidden shape, so there is no combo-break
+  /// audio distinction here.
+  void _onBombTap(BurstObject obj) {
+    if (_roundEnded) return;
+
+    // No dedicated bomb SFX asset yet (Phase 5 audio pass); reuse wrong_tap.
+    _audio?.play('wrong_tap.ogg');
+    _haptics?.wrong();
+
+    _scoreManager.onPenaltyTap();
+    _timerManager.addTime(-GameConstants.kBombTimePenalty);
+
+    // Capped, single-pulse white blast (seizure-safe; edge vignette if reduced).
+    add(WhiteBlastEffect(reduced: _reduceFlashing));
+    add(ScreenShake());
+    add(SlowMotionEffect());
+
+    if (_timerManager.isExpired) {
+      _endRound();
+    }
+
+    add(TapFeedbackEffect(
+      position: obj.position.clone(),
+      color: forbiddenColor,
+      size: levelConfig.objectSize.toDouble(),
+    ));
+  }
+
+  /// Opens a memory checkpoint (§6): freezes the round and signals the
+  /// GameScreen (via [GameState.checkpointActive]) to show the recall modal.
+  void _openCheckpoint() {
+    _activeCheckpoint = _checkpointManager.buildPrompt();
+    controller.state.checkpointActive.value = true;
+    paused = true;
+  }
+
+  /// Resolves the open checkpoint with the player's [selected] tokens: applies
+  /// the time reward/penalty, clears the prompt, and resumes the round. Called
+  /// by the GameScreen when the modal is submitted. Reference: §6.
+  void resolveCheckpoint(List<String> selected) {
+    if (_activeCheckpoint == null) return;
+    final double delta = _checkpointManager.resolve(selected);
+    _timerManager.addTime(delta);
+    _activeCheckpoint = null;
+    controller.state.checkpointActive.value = false;
+    paused = false;
+    if (_timerManager.isExpired) {
+      _endRound();
+    }
+  }
+
+  /// Handles a burst object whose lifetime expired before it was tapped.
+  void _onExpired(BurstObject obj) {
+    // An expired correct object drops the combo multiplier one step; an expired
+    // forbidden object OR bomb is exempt -- letting a forbidden/bomb expire is
+    // the correct (no-tap) behaviour (FR-06, Section 2.3). No audio, no penalty.
+    _scoreManager.onMissed(obj.isForbidden || obj.isBomb);
   }
 
   /// Ends the current round.
@@ -510,6 +654,10 @@ class DttGame extends FlameGame {
   void _endRound() {
     _roundEnded = true;
     final score = controller.state.score.value;
+    // Persist best score on the timer-end path too. In Burst mode lives never
+    // reach 0, so LifeManager's save never fires; without this a timed-out
+    // round would not record a new best. saveBestScore is idempotent.
+    ScoreService().saveBestScore(score);
     if (score > _bestAtStart && _bestAtStart > 0) {
       _audio?.play('new_best.ogg');
     } else {

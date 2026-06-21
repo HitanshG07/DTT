@@ -24,6 +24,9 @@ class MockGameController implements GameController {
   final GameState state = GameState();
 
   @override
+  int get level => 1;
+
+  @override
   LevelConfig get levelConfig => LevelRegistry.levels[0];
 
   Timer? _scoreTimer;

@@ -32,6 +32,16 @@ class GameState {
   /// Trigger for proximity warnings (FR-15).
   final ValueNotifier<int> proximityTrigger = ValueNotifier<int>(0);
 
+  /// Seconds remaining in the current round (2.0 Burst mode countdown).
+  /// Initial: 0.0 until [TimerManager] seeds it on round start. Unused by the
+  /// 1.x falling / Zen path, which is lives-based.
+  /// Reference: DTT_2.0_ROADMAP.md §2.2, §4 (Phase 1).
+  final ValueNotifier<double> timeRemaining = ValueNotifier<double>(0.0);
+
+  /// Whether a memory-checkpoint recall modal is open (2.0 Phase 3, §6). While
+  /// true the round timer is frozen and gameplay is paused.
+  final ValueNotifier<bool> checkpointActive = ValueNotifier<bool>(false);
+
   /// Disposes all ValueNotifiers to prevent memory leaks.
   ///
   /// **WARNING:** GameScreen must call gameState.dispose() in its widget
@@ -51,5 +61,7 @@ class GameState {
     decayProgress.dispose();
     forbiddenShape.dispose();
     proximityTrigger.dispose();
+    timeRemaining.dispose();
+    checkpointActive.dispose();
   }
 }

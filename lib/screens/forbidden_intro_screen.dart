@@ -48,6 +48,7 @@ class _ForbiddenIntroScreenState extends State<ForbiddenIntroScreen> with Single
     _controller = widget.mockController ?? RealGameController(
       audioService: widget.audio,
       hapticsService: widget.haptics,
+      reduceFlashing: widget.prefs.getBool('dtt_reduce_flashing') ?? false,
     );
 
     // Select forbidden shape using ForbiddenManager before screen appears (Section 2.5, 5.2)

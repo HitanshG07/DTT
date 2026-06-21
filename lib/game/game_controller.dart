@@ -18,6 +18,10 @@ abstract class GameController {
   /// The active level configuration.
   LevelConfig get levelConfig;
 
+  /// The 1-indexed level number being played (1..30). Used for per-level star
+  /// persistence and unlock gating (2.0 Phase 4).
+  int get level;
+
   /// Starts the game loop.
   void start();
 

@@ -4,6 +4,21 @@ import 'package:flame/game.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dont_tap_that/game/dtt_game.dart';
 import 'package:dont_tap_that/game/real_game_controller.dart';
+import 'package:dont_tap_that/game/config/checkpoint_spec.dart';
+import 'package:dont_tap_that/game/config/level_config.dart';
+
+/// Phase 4A note: forbidden rotation is config-driven and (in the generated
+/// curve) only turns on from L13. These integration tests exercise the rotation
+/// **engine**, so they build an explicit rotating config via [_rotating] rather
+/// than relying on a particular level number. `roundDuration` is large so the
+/// burst round timer never cuts a rotation, and checkpoints are disabled (a
+/// checkpoint would pause the game waiting for a recall answer).
+LevelConfig _rotating(LevelConfig base, {required int interval}) => base.copyWith(
+      forbiddenChanges: true,
+      forbiddenInterval: interval,
+      roundDuration: 300.0,
+      checkpoint: const CheckpointSpec(),
+    );
 
 void main() {
   // Mock SharedPreferences
@@ -13,17 +28,17 @@ void main() {
     late RealGameController controller;
 
     setUp(() {
-      controller = RealGameController(level: 4); // Default to Level 4 config
+      controller = RealGameController(level: 4);
     });
 
     tearDown(() {
       controller.dispose();
     });
 
-    testWidgets('Level 4 timer fires at exactly 30 s elapsed after warmup', (WidgetTester tester) async {
+    testWidgets('interval-30 config fires once at exactly 30 s after warmup', (WidgetTester tester) async {
       final game = DttGame(
         controller: controller,
-        levelConfig: controller.levelConfig,
+        levelConfig: _rotating(controller.levelConfig, interval: 30),
         correctColor: Colors.green,
         forbiddenColor: Colors.red,
         shapeColor: Colors.white,
@@ -59,20 +74,16 @@ void main() {
       expect(newForbidden, isNot(equals(initialForbidden)),
           reason: 'Forbidden shape must change at exactly 30s elapsed after warmup');
 
-      // 4. Level 4 changes ONCE only. Let's pump another 30 seconds and check it doesn't change again.
+      // 4. interval==30 changes ONCE only. Pump another 30 s; it must not change again.
       await tester.pump(const Duration(seconds: 30));
       expect(controller.state.forbiddenShape.value, equals(newForbidden),
-          reason: 'Level 4 forbidden shape should only change once per round');
+          reason: 'interval-30 forbidden shape should only change once per round');
     });
 
-    testWidgets('Level 5 timer fires periodically at 20 s, 40 s, 60 s', (WidgetTester tester) async {
-      // Re-initialize controller for Level 5
-      controller.dispose();
-      controller = RealGameController(level: 5);
-
+    testWidgets('interval-20 config fires periodically at 20 s, 40 s, 60 s', (WidgetTester tester) async {
       final game = DttGame(
         controller: controller,
-        levelConfig: controller.levelConfig,
+        levelConfig: _rotating(controller.levelConfig, interval: 20),
         correctColor: Colors.green,
         forbiddenColor: Colors.red,
         shapeColor: Colors.white,
@@ -95,31 +106,31 @@ void main() {
       await tester.pump(const Duration(seconds: 12));
       expect(controller.state.forbiddenShape.value, equals(currentForbidden));
 
-      // 2. First 20s tick (fires at 20s mark -> 12 + 20 = 32s total elapsed)
+      // 2. First 20s tick
       await tester.pump(const Duration(seconds: 20));
       var nextForbidden = controller.state.forbiddenShape.value;
       expect(nextForbidden, isNot(equals(currentForbidden)),
-          reason: 'First Level 5 change should fire at 20s');
+          reason: 'First change should fire at 20s');
       currentForbidden = nextForbidden;
 
-      // 3. Second 20s tick (fires at 40s mark -> 12 + 40 = 52s total elapsed)
+      // 3. Second 20s tick
       await tester.pump(const Duration(seconds: 20));
       nextForbidden = controller.state.forbiddenShape.value;
       expect(nextForbidden, isNot(equals(currentForbidden)),
-          reason: 'Second Level 5 change should fire at 40s');
+          reason: 'Second change should fire at 40s');
       currentForbidden = nextForbidden;
 
-      // 4. Third 20s tick (fires at 60s mark -> 12 + 60 = 72s total elapsed)
+      // 4. Third 20s tick
       await tester.pump(const Duration(seconds: 20));
       nextForbidden = controller.state.forbiddenShape.value;
       expect(nextForbidden, isNot(equals(currentForbidden)),
-          reason: 'Third Level 5 change should fire at 60s');
+          reason: 'Third change should fire at 60s');
     });
 
     testWidgets('Change does not fire while game is paused', (WidgetTester tester) async {
       final game = DttGame(
         controller: controller,
-        levelConfig: controller.levelConfig,
+        levelConfig: _rotating(controller.levelConfig, interval: 30),
         correctColor: Colors.green,
         forbiddenColor: Colors.red,
         shapeColor: Colors.white,
@@ -154,7 +165,7 @@ void main() {
       controller.resume();
       await tester.pump();
 
-      // Now pump the remaining time to complete the 30s interval (we had 0s accumulated after warmup when paused)
+      // Now pump the remaining time to complete the 30s interval.
       await tester.pump(const Duration(seconds: 30));
 
       expect(controller.state.forbiddenShape.value, isNot(equals(initialForbidden)),
@@ -162,13 +173,9 @@ void main() {
     });
 
     testWidgets('No-repeat rule: new forbidden shape differs from the previous shape', (WidgetTester tester) async {
-      // Re-initialize controller for Level 5 to support multiple rotations
-      controller.dispose();
-      controller = RealGameController(level: 5);
-
       final game = DttGame(
         controller: controller,
-        levelConfig: controller.levelConfig,
+        levelConfig: _rotating(controller.levelConfig, interval: 20),
         correctColor: Colors.green,
         forbiddenColor: Colors.red,
         shapeColor: Colors.white,
@@ -184,13 +191,13 @@ void main() {
 
       await tester.pump();
 
-      // We will force several rotations and check that each one is different from the previous.
       var previousForbidden = controller.state.forbiddenShape.value!;
 
-      // Bypass warmup manually or by pumping
+      // Bypass warmup.
       await tester.pump(const Duration(seconds: 12));
 
-      for (int i = 0; i < 5; i++) {
+      // roundDuration is 300s here, so all rotations fall inside the round.
+      for (int i = 0; i < 3; i++) {
         await tester.pump(const Duration(seconds: 20));
         final newForbidden = controller.state.forbiddenShape.value!;
         expect(newForbidden, isNot(equals(previousForbidden)),
@@ -202,7 +209,7 @@ void main() {
     testWidgets('HUD ValueNotifier updates when forbidden shape changes', (WidgetTester tester) async {
       final game = DttGame(
         controller: controller,
-        levelConfig: controller.levelConfig,
+        levelConfig: _rotating(controller.levelConfig, interval: 30),
         correctColor: Colors.green,
         forbiddenColor: Colors.red,
         shapeColor: Colors.white,

@@ -18,6 +18,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   late bool _audioEnabled;
   late bool _hapticsEnabled;
+  late bool _reduceFlashing;
 
   @override
   void initState() {
@@ -25,6 +26,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // Default to true if key is not present (Section 5.1 S-04)
     _audioEnabled = widget.prefs.getBool('dtt_audio_enabled') ?? true;
     _hapticsEnabled = widget.prefs.getBool('dtt_haptics_enabled') ?? true;
+    // Reduce flashing defaults OFF (full effects) but is opt-in for safety (2.0 §5).
+    _reduceFlashing = widget.prefs.getBool('dtt_reduce_flashing') ?? false;
   }
 
   Future<void> _updateAudioSetting(bool val) async {
@@ -41,6 +44,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     // Saved immediately on change, not on close (Section 5.2)
     await widget.prefs.setBool('dtt_haptics_enabled', val);
+  }
+
+  Future<void> _updateReduceFlashingSetting(bool val) async {
+    setState(() {
+      _reduceFlashing = val;
+    });
+    // Saved immediately on change, not on close (Section 5.2). Applies next round.
+    await widget.prefs.setBool('dtt_reduce_flashing', val);
   }
 
   @override
@@ -133,6 +144,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 value: _hapticsEnabled,
                 onChanged: _updateHapticsSetting,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16.0), // 16 px gap between rows
+          // Row 3: Reduce Flashing Card (seizure safety, 2.0 §5)
+          Card(
+            color: AppColors.kSurface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12.0),
+            ),
+            elevation: 0,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: SwitchListTile(
+                // ignore: deprecated_member_use
+                activeColor: AppColors.kAccent,
+                title: const Text(
+                  "Reduce Flashing",
+                  style: TextStyle(
+                    fontFamily: AppFonts.kFontBody,
+                    fontSize: 16.0,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.kPrimaryText,
+                  ),
+                ),
+                subtitle: const Text(
+                  "Seizure safety: softer, non-strobing effects",
+                  style: TextStyle(
+                    fontFamily: AppFonts.kFontBody,
+                    fontSize: 13.0,
+                    color: AppColors.kSecondaryText,
+                  ),
+                ),
+                value: _reduceFlashing,
+                onChanged: _updateReduceFlashingSetting,
               ),
             ),
           ),

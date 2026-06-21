@@ -1,6 +1,7 @@
 ﻿import 'dart:ui';
 
 import '../config/shape_type.dart';
+import 'bomb_shape.dart';
 import 'circle_shape.dart';
 import 'cross_shape.dart';
 import 'diamond_shape.dart';
@@ -41,6 +42,8 @@ abstract class BaseShape {
         return DiamondShape();
       case ShapeType.cross:
         return CrossShape();
+      case ShapeType.bomb:
+        return BombShape();
     }
   }
 }

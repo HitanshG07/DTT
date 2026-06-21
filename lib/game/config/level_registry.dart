@@ -1,108 +1,44 @@
-﻿import 'level_config.dart';
-import 'shape_type.dart';
+import 'level_config.dart';
+import 'level_generator.dart';
+import 'star_thresholds.dart';
 
 /// Registry of all level configurations.
 ///
-/// Values match Section 3.1 parameter table exactly.
-/// Level 5 is the ceiling per Section 3.3 -- game runs indefinitely
-/// at Level 5 config until lives reach 0.
+/// As of 2.0 Phase 4 the 30 levels are **generated** from [LevelGenerator]
+/// (sawtooth curve + flavors + human-limit caps) rather than hand-typed. The
+/// public API ([forLevel], [levels], [levelCount]) is unchanged so callers and
+/// the engine are unaffected — difficulty still lives entirely in [LevelConfig].
 ///
-/// Reference: Section 3.1, Section 3.3.
+/// `_starOverrides` is the mandatory hand-tuning hook (guardrail): any level
+/// whose generated star thresholds play badly in playtest is overridden here,
+/// without touching the curve. Values below are conservative placeholders for
+/// the late "Gauntlet" levels and will be tuned on-device.
+///
+/// Reference: DTT_2.0_ROADMAP.md §7 (Phase 4A), Section 3.1, 3.3.
 class LevelRegistry {
   LevelRegistry._();
 
-  /// All five level configurations, 0-indexed internally.
-  static const List<LevelConfig> levels = [
-    // Level 1: Onboarding. Large shapes, easy recognition.
-    LevelConfig(
-      fallSpeed: 120,
-      spawnRate: 0.5,
-      maxObjects: 4,
-      shapes: [ShapeType.circle, ShapeType.square, ShapeType.triangle],
-      forbiddenChanges: false,
-      forbiddenInterval: 0,
-      idleDecaySeconds: 4.0,
-      objectSize: 48,
-    ),
-    // Level 2: Pentagon added. Slight size reduction.
-    LevelConfig(
-      fallSpeed: 160,
-      spawnRate: 0.7,
-      maxObjects: 5,
-      shapes: [
-        ShapeType.circle,
-        ShapeType.square,
-        ShapeType.triangle,
-        ShapeType.pentagon,
-      ],
-      forbiddenChanges: false,
-      forbiddenInterval: 0,
-      idleDecaySeconds: 4.0,
-      objectSize: 46,
-    ),
-    // Level 3: Star added. Shapes noticeably smaller.
-    LevelConfig(
-      fallSpeed: 210,
-      spawnRate: 1.0,
-      maxObjects: 6,
-      shapes: [
-        ShapeType.circle,
-        ShapeType.square,
-        ShapeType.triangle,
-        ShapeType.pentagon,
-        ShapeType.star,
-      ],
-      forbiddenChanges: false,
-      forbiddenInterval: 0,
-      idleDecaySeconds: 4.0,
-      objectSize: 42,
-    ),
-    // Level 4: Diamond added. Mid-round switch every 30 s.
-    LevelConfig(
-      fallSpeed: 260,
-      spawnRate: 1.3,
-      maxObjects: 7,
-      shapes: [
-        ShapeType.circle,
-        ShapeType.square,
-        ShapeType.triangle,
-        ShapeType.pentagon,
-        ShapeType.star,
-        ShapeType.diamond,
-      ],
-      forbiddenChanges: true,
-      forbiddenInterval: 30,
-      idleDecaySeconds: 4.0,
-      objectSize: 40,
-    ),
-    // Level 5: All 7 shapes. 25% smaller than L1. Switch every 20 s.
-    LevelConfig(
-      fallSpeed: 320,
-      spawnRate: 1.6,
-      maxObjects: 8,
-      shapes: [
-        ShapeType.circle,
-        ShapeType.square,
-        ShapeType.triangle,
-        ShapeType.pentagon,
-        ShapeType.star,
-        ShapeType.diamond,
-        ShapeType.cross,
-      ],
-      forbiddenChanges: true,
-      forbiddenInterval: 20,
-      idleDecaySeconds: 4.0,
-      objectSize: 36,
-    ),
-  ];
+  /// Total number of levels (6 worlds × 5).
+  static const int levelCount = LevelGenerator.totalLevels; // 30
+
+  /// Hand-tuned star-threshold overrides (playtest-driven). Keyed by 1-indexed
+  /// level. Empty entries fall back to the generated baseline.
+  static const Map<int, StarThresholds> _starOverrides = {
+    // Late Gauntlet levels: realistic human scores fall below the formula's
+    // baseline under full cognitive load, so ease the cutoffs. Tune on-device.
+    29: StarThresholds(one: 900, two: 1500, three: 2200),
+    30: StarThresholds(one: 1000, two: 1700, three: 2500),
+  };
+
+  static const LevelGenerator _generator =
+      LevelGenerator(starOverrides: _starOverrides);
 
   /// Returns the [LevelConfig] for the given 1-indexed [level].
   ///
-  /// Clamps to Level 5 (the ceiling). Level 5 is the maximum difficulty;
-  /// the game runs indefinitely at Level 5 config until lives reach 0.
-  /// Reference: Section 3.3.
-  static LevelConfig forLevel(int level) {
-    final clamped = level.clamp(1, levels.length);
-    return levels[clamped - 1];
-  }
+  /// Clamps to the valid range [1, levelCount]. Reference: Section 3.3.
+  static LevelConfig forLevel(int level) => _generator.forLevel(level);
+
+  /// All level configurations (1-indexed in order). Computed on demand.
+  static List<LevelConfig> get levels =>
+      [for (int n = 1; n <= levelCount; n++) _generator.forLevel(n)];
 }
