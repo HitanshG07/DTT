@@ -9,6 +9,7 @@ import 'screens/settings_screen.dart';
 import 'screens/forbidden_intro_screen.dart';
 import 'screens/game_screen.dart';
 import 'screens/game_over_screen.dart';
+import 'screens/map_screen.dart';
 import 'services/haptics_service.dart';
 import 'services/audio_service.dart';
 
@@ -59,6 +60,9 @@ class _DttAppState extends State<DttApp> {
         '/how-to-play': (context) => HowToPlayScreen(prefs: widget.prefs),
         '/settings': (context) => SettingsScreen(prefs: widget.prefs),
         '/game': (context) => const GameScreen(),
+        // Phase 4C-1: chaptered level map. Reachable on its own route; the
+        // Start→Map→game flow is wired in Phase 4C-2.
+        '/map': (context) => const MapScreen(),
         '/dont-tap-that/tutorial': (context) => const Scaffold(
               body: Center(
                 child: Text(
@@ -73,12 +77,17 @@ class _DttAppState extends State<DttApp> {
       },
       onGenerateRoute: (settings) {
         if (settings.name == '/forbidden-intro') {
+          // 2.0 Phase 4C-2: the chosen level arrives as {'level': n} from the
+          // map node tap (defaults to 1 for any legacy/no-arg entry).
+          final args = settings.arguments;
+          final int level = (args is Map && args['level'] is int) ? args['level'] as int : 1;
           return PageRouteBuilder(
             settings: settings,
             pageBuilder: (context, animation, secondaryAnimation) => ForbiddenIntroScreen(
               prefs: widget.prefs,
               haptics: hapticsService,
               audio: audioService,
+              level: level,
             ),
             transitionsBuilder: (context, animation, secondaryAnimation, child) {
               return FadeTransition(opacity: animation, child: child);

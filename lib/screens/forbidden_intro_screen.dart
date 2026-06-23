@@ -22,12 +22,17 @@ class ForbiddenIntroScreen extends StatefulWidget {
   final HapticsService? haptics;
   final AudioService? audio;
 
+  /// 1-indexed level chosen on the map (2.0 Phase 4C-2). Drives which
+  /// [LevelConfig] the real controller loads. Defaults to 1.
+  final int level;
+
   const ForbiddenIntroScreen({
     super.key,
     required this.prefs,
     this.mockController,
     this.haptics,
     this.audio,
+    this.level = 1,
   });
 
   @override
@@ -46,6 +51,7 @@ class _ForbiddenIntroScreenState extends State<ForbiddenIntroScreen> with Single
     super.initState();
     // Initialize controller using RealGameController (Stage 4)
     _controller = widget.mockController ?? RealGameController(
+      level: widget.level,
       audioService: widget.audio,
       hapticsService: widget.haptics,
       reduceFlashing: widget.prefs.getBool('dtt_reduce_flashing') ?? false,

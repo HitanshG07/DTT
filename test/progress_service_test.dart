@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:dont_tap_that/constants/debug_flags.dart';
 import 'package:dont_tap_that/services/progress_service.dart';
 
 void main() {
@@ -42,7 +43,7 @@ void main() {
       expect(await progress.isUnlocked(2), isFalse);
       await progress.saveStars(1, 1);
       expect(await progress.isUnlocked(2), isTrue);
-    });
+    }, skip: DebugFlags.unlockAllLevels); // dev unlock opens every level
 
     test('getAllStars returns one entry per level in order', () async {
       await progress.saveStars(1, 3);
@@ -52,6 +53,21 @@ void main() {
       expect(all[0], 3); // level 1
       expect(all[1], 1); // level 2
       expect(all[2], 0); // level 3 (none)
+    });
+
+    test('DebugFlags.unlockAllLevels: gate short-circuits when on, gated when off',
+        () async {
+      // Fresh prefs: nothing earned, so Level 2/30 would normally be locked.
+      if (DebugFlags.unlockAllLevels) {
+        expect(await progress.isUnlocked(2), isTrue);
+        expect(await progress.isUnlocked(30), isTrue);
+      } else {
+        // Shipped default — normal gating is enforced.
+        expect(await progress.isUnlocked(2), isFalse);
+        expect(await progress.isUnlocked(30), isFalse);
+      }
+      // getStars is never affected by the flag — star records stay honest.
+      expect(await progress.getStars(2), 0);
     });
   });
 }

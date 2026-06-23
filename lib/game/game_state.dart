@@ -53,8 +53,18 @@ class GameState {
   /// Phase 7: enter and exit the module 10 times in one session and
   /// confirm heap returns to baseline each time in Flutter DevTools
   /// Memory view.
+  /// Guards against double-disposal. The [GameController] contract already
+  /// disposes state (see GameController.dispose), so a caller that also disposes
+  /// it directly would otherwise trigger "A ValueNotifier was used after being
+  /// disposed". Disposal is therefore idempotent.
+  bool _disposed = false;
+
   /// Reference: Section 7.2 -- ValueNotifier Disposal.
+  ///
+  /// Idempotent: safe to call more than once (subsequent calls are no-ops).
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     score.dispose();
     lives.dispose();
     multiplier.dispose();

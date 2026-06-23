@@ -101,17 +101,21 @@ void main() {
     });
 
     group('human-possible hard caps (every level)', () {
-      test('lifetime ≥ 1.1s, bomb ≤ 0.30, rotation ≥ 12s, recall ≤ 4', () {
+      // Hotfix H raised the floors so the late campaign is human-clearable:
+      // lifetime ≥ 1.7s, size 42–52px, ≤ 7 on-screen, waves ≤ 6.
+      test('lifetime ≥ 1.7s, bomb ≤ 0.30, rotation ≥ 12s, recall ≤ 4, humane size/counts', () {
         for (int n = 1; n <= 30; n++) {
           final c = LevelRegistry.forLevel(n);
-          expect(c.objectLifetime, greaterThanOrEqualTo(1.1), reason: 'L$n lifetime');
+          expect(c.objectLifetime, greaterThanOrEqualTo(1.7), reason: 'L$n lifetime');
           expect(c.bombChance, lessThanOrEqualTo(0.30), reason: 'L$n bomb');
           if (c.forbiddenChanges) {
             expect(c.forbiddenInterval, greaterThanOrEqualTo(12), reason: 'L$n rot');
           }
           expect(c.checkpoint.recallCount, lessThanOrEqualTo(4), reason: 'L$n recall');
-          expect(c.objectSize, inInclusiveRange(32, 52), reason: 'L$n size');
-          expect(c.waveSize, lessThanOrEqualTo(c.maxObjects), reason: 'L$n wave');
+          expect(c.objectSize, inInclusiveRange(42, 52), reason: 'L$n size');
+          expect(c.maxObjects, lessThanOrEqualTo(7), reason: 'L$n maxObjects');
+          expect(c.waveSize, lessThanOrEqualTo(6), reason: 'L$n waveSize');
+          expect(c.waveSize, lessThanOrEqualTo(c.maxObjects), reason: 'L$n wave≤max');
         }
       });
     });

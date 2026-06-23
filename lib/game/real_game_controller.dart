@@ -97,4 +97,10 @@ class RealGameController implements GameController {
 
   @override
   int get longestStreak => scoreManager.longestStreak;
+
+  @override
+  int get checkpointsShown => game?.checkpointsShown ?? 0;
+
+  @override
+  int get checkpointsPerfect => game?.checkpointsPerfect ?? 0;
 }

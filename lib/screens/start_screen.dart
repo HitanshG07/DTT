@@ -122,7 +122,9 @@ class _StartScreenState extends State<StartScreen> {
                       elevation: 0,
                     ),
                     onPressed: () {
-                      Navigator.pushNamed(context, '/forbidden-intro').then((_) => _refreshBestScore());
+                      // 2.0 Phase 4C-2: PLAY opens the level map; a node there
+                      // launches the forbidden-intro for the chosen level.
+                      Navigator.pushNamed(context, '/map').then((_) => _refreshBestScore());
                     },
                     child: const Text(
                       "PLAY",

@@ -6,12 +6,14 @@ import '../game/game_controller.dart';
 import '../game/shapes/base_shape.dart';
 import '../game/effects/forbidden_pulse.dart';
 import '../game/effects/proximity_pulse.dart';
-import '../game/effects/heart_fade.dart';
 import 'combo_decay_badge.dart';
 
-/// HUD Overlay widget (S-06) showing lives, score, combo badge, and forbidden shape thumbnail.
+/// HUD Overlay widget (S-06) showing the round-time countdown, score, combo
+/// badge, and forbidden shape thumbnail.
 ///
-/// Reference: Section 4.4, Section 11.4.
+/// 2.0 Burst mode uses a **time economy** (no lives): the left slot shows a
+/// numeric mm:ss countdown bound to [GameState.timeRemaining], replacing the
+/// old hearts. Reference: Section 4.4, Section 11.4; DTT_2.0_ROADMAP.md §5.
 class HudOverlay extends StatelessWidget {
   final GameController controller;
 
@@ -35,34 +37,58 @@ class HudOverlay extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // LEFT — Lives
-                  ValueListenableBuilder<int>(
-                    valueListenable: state.lives,
-                    builder: (context, livesValue, child) {
-                      return Row(
+                  // LEFT — Round-time countdown (mm:ss). Burst mode's time
+                  // economy uses this in place of lives/hearts; turns amber in
+                  // the final 10 s as a low-time warning (static colour change,
+                  // seizure-safe — no flashing).
+                  ValueListenableBuilder<double>(
+                    valueListenable: state.timeRemaining,
+                    builder: (context, remaining, child) {
+                      final int secs = remaining.ceil().clamp(0, 3599);
+                      final String mmss =
+                          '${secs ~/ 60}:${(secs % 60).toString().padLeft(2, '0')}';
+                      final bool urgent = secs <= 10;
+                      return Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         mainAxisSize: MainAxisSize.min,
-                        children: List.generate(3, (index) {
-                          final isActive = index < livesValue;
-                          return Padding(
-                            padding: EdgeInsets.only(
-                              right: index < 2 ? AppSizes.kHeartSpacing : 0.0,
+                        children: [
+                          Text(
+                            mmss,
+                            style: TextStyle(
+                              fontFamily: AppFonts.kFontDisplay,
+                              fontSize: AppSizes.kHudTimeFontSize,
+                              color: urgent
+                                  ? AppColors.kDecayWarning
+                                  : AppColors.kPrimaryText,
+                              fontWeight: FontWeight.bold,
+                              height: 1.0,
                             ),
-                            child: HeartFade(
-                              isActive: isActive,
-                              size: AppSizes.kHeartIconSize,
-                              activeColor: AppColors.kWrong,
-                              inactiveColor: AppColors.kSecondaryText,
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.only(top: 2.0),
+                            child: Text(
+                              "TIME",
+                              style: TextStyle(
+                                fontFamily: AppFonts.kFontBody,
+                                fontSize: AppSizes.kForbiddenLabelFontSize,
+                                color: AppColors.kSecondaryText,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.5,
+                              ),
                             ),
-                          );
-                        }),
+                          ),
+                        ],
                       );
                     },
                   ),
 
-                  // CENTRE — Score + Combo Badge
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  // CENTRE — Score (the HUD hero) with a small combo badge
+                  // tucked at its lower-right. The 0-opacity placeholder
+                  // reserves the badge's width so the score doesn't shift when
+                  // the combo appears or clears.
+                  Row(
                     mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       ValueListenableBuilder<int>(
                         valueListenable: state.score,
@@ -79,37 +105,42 @@ class HudOverlay extends StatelessWidget {
                           );
                         },
                       ),
+                      const SizedBox(width: 6.0),
                       ValueListenableBuilder<int>(
                         valueListenable: state.multiplier,
                         builder: (context, multValue, child) {
-                          if (multValue <= 1) {
-                            // Render at 0 opacity to warm up shaders for ComboDecayBadge and ComboDecayArc
-                            return const Opacity(
-                              opacity: 0.0,
-                              child: ComboDecayBadge(
-                                multiplier: 2,
-                                decayProgress: 0.5,
-                              ),
-                            );
-                          }
-                          return ValueListenableBuilder<double>(
-                            valueListenable: state.decayProgress,
-                            builder: (context, decayValue, child) {
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 2.0),
-                                child: ComboDecayBadge(
-                                  multiplier: multValue,
-                                  decayProgress: decayValue,
-                                ),
-                              );
-                            },
+                          final Widget badge = multValue <= 1
+                              ? const Opacity(
+                                  opacity: 0.0,
+                                  child: ComboDecayBadge(
+                                    multiplier: 2,
+                                    decayProgress: 0.5,
+                                  ),
+                                )
+                              : ValueListenableBuilder<double>(
+                                  valueListenable: state.decayProgress,
+                                  builder: (context, decayValue, child) {
+                                    return ComboDecayBadge(
+                                      multiplier: multValue,
+                                      decayProgress: decayValue,
+                                    );
+                                  },
+                                );
+                          // Shrink the 40px badge into a compact corner accent.
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 2.0),
+                            child: SizedBox(
+                              width: 27.0,
+                              height: 27.0,
+                              child: FittedBox(child: badge),
+                            ),
                           );
                         },
                       ),
                     ],
                   ),
 
-                  // RIGHT — Forbidden shape thumbnail
+                  // RIGHT — Forbidden shape thumbnail + AVOID label
                   ValueListenableBuilder(
                     valueListenable: state.forbiddenShape,
                     builder: (context, shapeType, child) {
@@ -144,10 +175,14 @@ class HudOverlay extends StatelessWidget {
                                   ),
                                   // Shape fill
                                   SizedBox(
-                                    width: AppSizes.kForbiddenThumbnailSize - 12.0,
-                                    height: AppSizes.kForbiddenThumbnailSize - 12.0,
+                                    width:
+                                        AppSizes.kForbiddenThumbnailSize - 12.0,
+                                    height:
+                                        AppSizes.kForbiddenThumbnailSize - 12.0,
                                     child: CustomPaint(
-                                      painter: ShapeFillPainter(shape: shapePainter),
+                                      painter: ShapeFillPainter(
+                                        shape: shapePainter,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -200,7 +235,11 @@ class ShapeFillPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant ShapeFillPainter oldDelegate) =>
+      // Each shape is its own BaseShape subclass, so a different forbidden shape
+      // means a different runtimeType. Repaint when it changes — otherwise the
+      // mid-round forbidden rotation leaves the old shape drawn in the HUD.
+      oldDelegate.shape.runtimeType != shape.runtimeType;
 }
 
 /// Draws a dashed circle border around the forbidden shape thumbnail.
@@ -238,5 +277,6 @@ class DashedThumbnailBorderPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant DashedThumbnailBorderPainter oldDelegate) => false;
+  bool shouldRepaint(covariant DashedThumbnailBorderPainter oldDelegate) =>
+      false;
 }

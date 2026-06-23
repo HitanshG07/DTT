@@ -39,6 +39,15 @@ class ScoreManager {
   /// Previous multiplier value, used to detect combo changes.
   int _previousMultiplier = 1;
 
+  /// Whether Frenzy Mode is active (Feature M). While true, [onCorrectTap]
+  /// awards [GameConstants.kFrenzyScoreMultiplier]× the base points. Ignited by
+  /// acing a memory checkpoint; counted down in [tick]; force-cleared by
+  /// [endFrenzy] on round end so it can't bleed past the clock.
+  bool _frenzyActive = false;
+
+  /// Seconds left in the current Frenzy window (0 when inactive).
+  double _frenzyRemaining = 0.0;
+
   /// Combo threshold: consecutive correct taps needed to increase multiplier.
   /// Each correct tap increments; when it reaches this value the
   /// multiplier steps up and the counter resets.
@@ -61,15 +70,38 @@ class ScoreManager {
   /// The current multiplier value.
   int get multiplier => _multiplier;
 
+  /// Whether Frenzy Mode is currently active (Feature M).
+  bool get isFrenzyActive => _frenzyActive;
+
+  /// Ignites a Frenzy window of [GameConstants.kFrenzyDurationSeconds]. Idempotent
+  /// re-trigger simply refreshes the timer to full. Called by the engine when a
+  /// memory checkpoint is aced.
+  void startFrenzy() {
+    if (_disposed) return;
+    _frenzyActive = true;
+    _frenzyRemaining = GameConstants.kFrenzyDurationSeconds;
+  }
+
+  /// Force-ends Frenzy immediately (e.g. on round end) so the double-points
+  /// window can never outlive the round clock.
+  void endFrenzy() {
+    _frenzyActive = false;
+    _frenzyRemaining = 0.0;
+  }
+
   /// Processes a correct (non-forbidden) tap.
   ///
   /// 1. Increments tap counters.
   /// 2. Resets idle decay timer.
   /// 3. Builds combo if below max.
-  /// 4. Awards points: kBasePoints * multiplier.
+  /// 4. Awards points: kBasePoints * frenzy * multiplier.
   /// 5. Updates streak tracking.
-  void onCorrectTap() {
-    if (_disposed) return;
+  ///
+  /// Returns the points actually awarded so the caller can render an accurate
+  /// ScorePop (e.g. "+20" during Frenzy Mode rather than a hardcoded "+10").
+  /// Returns 0 if the manager is disposed.
+  int onCorrectTap() {
+    if (_disposed) return 0;
     _totalTapped++;
     _correctTapped++;
     _idleDecayTimer = 0.0;
@@ -85,7 +117,11 @@ class ScoreManager {
       }
     }
 
-    final int points = GameConstants.kScorePerTap * _multiplier;
+    // Frenzy Mode (Feature M): correct taps are worth kFrenzyScoreMultiplier×
+    // the base while the window is open. Points are still earned tap-by-tap.
+    final int frenzyMult =
+        _frenzyActive ? GameConstants.kFrenzyScoreMultiplier : 1;
+    final int points = GameConstants.kScorePerTap * frenzyMult * _multiplier;
     _state.score.value += points;
 
     // Streak tracking
@@ -94,6 +130,8 @@ class ScoreManager {
 
     // Reset decay progress on correct tap (FR-16).
     _state.decayProgress.value = 1.0;
+
+    return points;
   }
 
   /// Processes a penalised tap (forbidden shape or bomb) *without* touching
@@ -159,6 +197,14 @@ class ScoreManager {
   /// multiplier drops by 1 step. Reference: Section 2.3.
   void tick(double dt) {
     if (_disposed) return;
+
+    // Frenzy countdown (Feature M). Driven by DttGame.update so it freezes when
+    // the game is paused (pause overlay / checkpoint modal halt update).
+    if (_frenzyActive) {
+      _frenzyRemaining -= dt;
+      if (_frenzyRemaining <= 0.0) endFrenzy();
+    }
+
     _idleDecayTimer += dt;
 
     // Update decay progress for the UI arc (FR-16).

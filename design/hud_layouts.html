@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DTT 2.0 — HUD layout options</title>
+<style>
+  :root {
+    --bg: #111111;        /* kBackground */
+    --surface: #1E1E1E;   /* kSurface */
+    --text: #F2F2F2;      /* kPrimaryText */
+    --muted: #8A8A8A;     /* kSecondaryText */
+    --accent: #3B82F6;    /* kAccent */
+    --warn: #F59E0B;      /* kDecayWarning */
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px;
+    background: #0a0a0a; color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+  h1 { font-weight: 800; letter-spacing: 1px; font-size: 20px; }
+  p.note { color: var(--muted); max-width: 760px; line-height: 1.5; }
+  .grid { display: flex; flex-wrap: wrap; gap: 28px; margin-top: 24px; }
+  .card { width: 390px; }
+  .card h2 { font-size: 14px; color: var(--accent); letter-spacing: 1px;
+             text-transform: uppercase; margin: 0 0 4px; }
+  .card .desc { font-size: 12px; color: var(--muted); margin: 0 0 10px; min-height: 32px; }
+  .card.chosen h2::after { content: " — current"; color: var(--muted); }
+
+  /* phone frame */
+  .phone {
+    width: 390px; background: var(--bg);
+    border: 1px solid #2a2a2a; border-radius: 22px; overflow: hidden;
+  }
+  .statusbar { height: 26px; background: var(--bg); display:flex; align-items:center;
+               padding: 0 16px; font-size: 11px; color: var(--muted); }
+
+  /* the HUD bar */
+  .hud {
+    background: var(--surface);
+    border-bottom: 1px solid rgba(242,242,242,0.10);
+    height: 72px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 12px;
+  }
+  .slot { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .row  { display: flex; flex-direction: row; align-items: center; gap: 10px; }
+
+  .num  { font-weight: 800; line-height: 1; }
+  .time .num { font-size: 22px; }
+  .time .num.warn { color: var(--warn); }
+  .score .num { font-size: 28px; }
+  .caption { font-size: 10px; color: var(--muted); letter-spacing: 1.5px;
+             font-weight: 700; margin-top: 2px; }
+  .caption.avoid { color: var(--accent); }
+
+  /* combo badge */
+  .combo {
+    width: 40px; height: 40px; border-radius: 50%;
+    border: 2px solid var(--accent); color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 15px;
+    background: rgba(59,130,246,0.08);
+  }
+  .combo.small { width: 26px; height: 26px; font-size: 12px; border-width: 1.5px; }
+
+  /* avoid thumbnail */
+  .avoidwrap { display: flex; flex-direction: column; align-items: center; }
+  .thumb {
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 1.5px dashed var(--accent);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .thumb .shape { width: 20px; height: 20px; border-radius: 50%; background: var(--text); }
+
+  .playarea { height: 120px; background: var(--bg); position: relative; }
+  .dot { position:absolute; width:22px; height:22px; border-radius:50%; background:var(--text); }
+</style>
+</head>
+<body>
+  <h1>DON'T TAP THAT 2.0 — HUD layout options</h1>
+  <p class="note">Rendered with the real palette &amp; sizes (surface #1E1E1E, score 28px,
+    time 22px, combo badge 40&nbsp;px, AVOID 36&nbsp;px dashed). Five placements for the
+    score &amp; combo. Tell me the one you want (by its number/title) and I'll wire it up.</p>
+
+  <div class="grid">
+
+    <!-- A: current -->
+    <div class="card chosen">
+      <h2>A · Combo by AVOID</h2>
+      <p class="desc">Score centered alone; combo badge sits left of the AVOID thumbnail.</p>
+      <div class="phone">
+        <div class="statusbar">2:07</div>
+        <div class="hud">
+          <div class="slot time"><div class="num">1:05</div><div class="caption">TIME</div></div>
+          <div class="slot score"><div class="num">120</div></div>
+          <div class="row">
+            <div class="combo">×3</div>
+            <div class="avoidwrap"><div class="thumb"><div class="shape"></div></div><div class="caption avoid">AVOID</div></div>
+          </div>
+        </div>
+        <div class="playarea"><div class="dot" style="left:60px;top:30px"></div><div class="dot" style="left:240px;top:70px"></div></div>
+      </div>
+    </div>
+
+    <!-- B: original -->
+    <div class="card">
+      <h2>B · Combo under score (center)</h2>
+      <p class="desc">The original: score centered with the combo badge stacked beneath it.</p>
+      <div class="phone">
+        <div class="statusbar">2:07</div>
+        <div class="hud">
+          <div class="slot time"><div class="num">1:05</div><div class="caption">TIME</div></div>
+          <div class="slot score"><div class="num">120</div><div class="combo" style="margin-top:4px">×3</div></div>
+          <div class="avoidwrap"><div class="thumb"><div class="shape"></div></div><div class="caption avoid">AVOID</div></div>
+        </div>
+        <div class="playarea"><div class="dot" style="left:60px;top:30px"></div><div class="dot" style="left:240px;top:70px"></div></div>
+      </div>
+    </div>
+
+    <!-- C: score left, time center -->
+    <div class="card">
+      <h2>C · Score left, Time center</h2>
+      <p class="desc">Score+combo move to the left slot; the countdown takes center.</p>
+      <div class="phone">
+        <div class="statusbar">2:07</div>
+        <div class="hud">
+          <div class="slot score"><div class="num">120</div><div class="combo" style="margin-top:4px">×3</div></div>
+          <div class="slot time"><div class="num">1:05</div><div class="caption">TIME</div></div>
+          <div class="avoidwrap"><div class="thumb"><div class="shape"></div></div><div class="caption avoid">AVOID</div></div>
+        </div>
+        <div class="playarea"><div class="dot" style="left:60px;top:30px"></div><div class="dot" style="left:240px;top:70px"></div></div>
+      </div>
+    </div>
+
+    <!-- D: combo inline left of score -->
+    <div class="card">
+      <h2>D · Combo inline, left of score</h2>
+      <p class="desc">Score centered, combo badge inline immediately to its left.</p>
+      <div class="phone">
+        <div class="statusbar">2:07</div>
+        <div class="hud">
+          <div class="slot time"><div class="num">1:05</div><div class="caption">TIME</div></div>
+          <div class="row"><div class="combo">×3</div><div class="slot score"><div class="num">120</div></div></div>
+          <div class="avoidwrap"><div class="thumb"><div class="shape"></div></div><div class="caption avoid">AVOID</div></div>
+        </div>
+        <div class="playarea"><div class="dot" style="left:60px;top:30px"></div><div class="dot" style="left:240px;top:70px"></div></div>
+      </div>
+    </div>
+
+    <!-- E: score big, small combo below-right -->
+    <div class="card">
+      <h2>E · Score big, small combo below-right</h2>
+      <p class="desc">Score centered &amp; prominent; a small combo badge tucked to its lower-right.</p>
+      <div class="phone">
+        <div class="statusbar">2:07</div>
+        <div class="hud">
+          <div class="slot time"><div class="num">1:05</div><div class="caption">TIME</div></div>
+          <div class="slot score" style="position:relative">
+            <div class="num">120</div>
+            <div class="combo small" style="position:absolute; right:-30px; bottom:-2px">×3</div>
+          </div>
+          <div class="avoidwrap"><div class="thumb"><div class="shape"></div></div><div class="caption avoid">AVOID</div></div>
+        </div>
+        <div class="playarea"><div class="dot" style="left:60px;top:30px"></div><div class="dot" style="left:240px;top:70px"></div></div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

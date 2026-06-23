@@ -40,6 +40,15 @@ void main() {
       expect(() => state.dispose(), returnsNormally);
     });
 
+    // Regression (run2.log): GameScreen used to call state.dispose() AND
+    // controller.dispose() (which also disposes state), throwing "A
+    // ValueNotifier was used after being disposed". dispose() is now idempotent.
+    test('dispose() is idempotent — calling twice does not throw', () {
+      final state = GameState();
+      state.dispose();
+      expect(() => state.dispose(), returnsNormally);
+    });
+
     test('notifiers can be updated', () {
       gameState.score.value = 100;
       gameState.lives.value = 2;

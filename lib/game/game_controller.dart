@@ -45,4 +45,11 @@ abstract class GameController {
 
   /// The longest consecutive correct tap streak.
   int get longestStreak;
+
+  /// Memory checkpoints resolved this round (0 on levels without checkpoints).
+  /// The denominator of the Game Over Memory rating (Feature M).
+  int get checkpointsShown;
+
+  /// Memory checkpoints aced (fully correct) this round — the numerator.
+  int get checkpointsPerfect;
 }

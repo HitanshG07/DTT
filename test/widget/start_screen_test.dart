@@ -21,7 +21,7 @@ void main() {
     expect(find.text("PLAY"), findsOneWidget);
   });
 
-  testWidgets('PLAY button navigates to /forbidden-intro', (WidgetTester tester) async {
+  testWidgets('PLAY button navigates to /map (2.0 Phase 4C-2)', (WidgetTester tester) async {
     final prefs = await SharedPreferences.getInstance();
 
     await tester.pumpWidget(
@@ -29,8 +29,8 @@ void main() {
         initialRoute: '/start',
         routes: {
           '/start': (context) => StartScreen(prefs: prefs),
-          '/forbidden-intro': (context) => const Scaffold(
-                body: Text('FORBIDDEN INTRO SCREEN'),
+          '/map': (context) => const Scaffold(
+                body: Text('MAP SCREEN'),
               ),
         },
       ),
@@ -40,7 +40,7 @@ void main() {
     await tester.tap(find.text("PLAY"));
     await tester.pumpAndSettle();
 
-    // Verify navigation occurred
-    expect(find.text('FORBIDDEN INTRO SCREEN'), findsOneWidget);
+    // Verify navigation to the level map occurred
+    expect(find.text('MAP SCREEN'), findsOneWidget);
   });
 }

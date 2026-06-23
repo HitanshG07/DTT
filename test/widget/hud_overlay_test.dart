@@ -19,9 +19,9 @@ void main() {
       (WidgetTester tester) async {
     final controller = RealGameController();
     controller.state.score.value = 120;
-    controller.state.lives.value = 2;
     controller.state.multiplier.value = 3; // > 1 -> combo decay badge renders
     controller.state.decayProgress.value = 0.5;
+    controller.state.timeRemaining.value = 65.0; // 1:05 on the countdown
     controller.state.forbiddenShape.value = ShapeType.circle;
 
     await tester.pumpWidget(
@@ -37,6 +37,32 @@ void main() {
     );
 
     // A RenderFlex overflow surfaces as a FlutterError during layout.
+    expect(tester.takeException(), isNull);
+
+    controller.dispose();
+  });
+
+  testWidgets('HudOverlay shows the round-time countdown (mm:ss), not hearts',
+      (WidgetTester tester) async {
+    final controller = RealGameController();
+    controller.state.timeRemaining.value = 65.0; // -> "1:05"
+    controller.state.forbiddenShape.value = ShapeType.circle;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: AppSizes.kHudHeight,
+            child: HudOverlay(controller: controller),
+          ),
+        ),
+      ),
+    );
+
+    // Time economy: the countdown renders, lives/hearts are gone.
+    expect(find.text('1:05'), findsOneWidget);
+    expect(find.text('TIME'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     controller.dispose();

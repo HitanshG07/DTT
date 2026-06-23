@@ -39,6 +39,7 @@ import 'effects/milestone_overlay_effect.dart';
 import 'effects/slow_motion_effect.dart';
 import 'effects/forbidden_change_warning.dart';
 import 'effects/white_blast_effect.dart';
+import 'effects/frenzy_edge_effect.dart';
 
 /// The main Flame game engine for Don't Tap That.
 ///
@@ -81,6 +82,18 @@ class DttGame extends FlameGame {
   /// GameScreen to populate the [MemoryCheckpointOverlay] (2.0 Phase 3, §6).
   CheckpointPrompt? _activeCheckpoint;
   CheckpointPrompt? get activeCheckpoint => _activeCheckpoint;
+
+  /// Checkpoints resolved / aced this round (Feature M) — surfaced to the
+  /// controller so Game Over can show the Memory rating.
+  int get checkpointsShown => _checkpointManager.checkpointsShown;
+  int get checkpointsPerfect => _checkpointManager.checkpointsPerfect;
+
+  /// Active Frenzy-window overlay (Feature M), tracked so [_endRound] can remove
+  /// it and stop a gold edge bleeding into Game Over.
+  FrenzyEdgeEffect? _frenzyEffect;
+
+  /// Gold tint for ScorePop while Frenzy Mode is active (matches the cue).
+  static const Color _frenzyGold = Color(0xFFF5B301);
 
   double _forbiddenChangeTimer = 0.0;
   bool _roundEnded = false;
@@ -230,15 +243,22 @@ class DttGame extends FlameGame {
     // 2. Score manager tick (idle decay).
     _scoreManager.tick(dt);
 
-    // 3. Round timer (2.0 Burst, §4) + memory checkpoints (§6). Both are frozen
-    //    while a checkpoint modal is open (also enforced by paused). The round
-    //    ends when the clock hits 0; a checkpoint opens when one is due.
-    if (!_spawnManager.isInWarmup && !controller.state.checkpointActive.value) {
+    // 3. Round timer (2.0 Burst, §4). The time-economy clock runs from round
+    //    start — it must NOT sit frozen during the spawn warmup, which read as
+    //    "the timer started too late". It is frozen only while a checkpoint
+    //    modal is open (also enforced by paused) and during a forbidden-change
+    //    warning (the early return above).
+    if (!controller.state.checkpointActive.value) {
       _timerManager.tick(dt);
       if (_timerManager.isExpired) {
         _endRound();
         return;
       }
+    }
+
+    // 3b. Memory checkpoints (§6) only after the warmup ease-in — no recall
+    //     prompts during the opening window; frozen while a modal is open.
+    if (!_spawnManager.isInWarmup && !controller.state.checkpointActive.value) {
       _checkpointManager.tick(dt);
       if (_checkpointManager.isDue) {
         _openCheckpoint();
@@ -399,8 +419,13 @@ class DttGame extends FlameGame {
   /// Reference: FR-13, Section 2.6.
   void _rotateForbiddenShape() {
     if (_forbiddenChangeInProgress) {
-      // ignore: avoid_print
-      print("Warning: Forbidden change sequence already in progress. Dropping trigger.");
+      // Debug-only (no print() in release — Architectural Rules 7.2), matching
+      // the spawn-overlap fallbacks.
+      assert(() {
+        // ignore: avoid_print
+        print("Warning: Forbidden change sequence already in progress. Dropping trigger.");
+        return true;
+      }());
       return;
     }
 
@@ -460,7 +485,10 @@ class DttGame extends FlameGame {
     final int prevScore = controller.state.score.value;
     final int prevMultiplier = _scoreManager.multiplier;
 
-    _scoreManager.onCorrectTap();
+    // The awarded points already include the combo and the Frenzy ×2 (Feature M),
+    // so the ScorePop shows the real number ("+20"/"+40") instead of a hardcoded +10.
+    final int awarded = _scoreManager.onCorrectTap();
+    final bool frenzy = _scoreManager.isFrenzyActive;
 
     // Pitch ladder calculation: raised by 4 semitones per combo step (Section 6.2)
     final double pitch = _audio?.pitchLadderEnabled == true
@@ -469,11 +497,11 @@ class DttGame extends FlameGame {
     _audio?.play('correct_tap.ogg', pitch: pitch);
     _haptics?.correct();
 
-    // ScorePop floating +10*Multiplier (Section 6.4)
+    // ScorePop floating "+points" (Section 6.4); gold while Frenzy is active.
     add(ScorePop(
-      text: "+${10 * _scoreManager.multiplier}",
+      text: "+$awarded",
       position: obj.position.clone(),
-      color: correctColor,
+      color: frenzy ? _frenzyGold : correctColor,
     ));
 
     // RingBurst expanding white circle (Section 6.4)
@@ -520,8 +548,10 @@ class DttGame extends FlameGame {
     switch (milestoneValue) {
       case 50:
         message = "Nice Start!";
-        // subtle ring burst in the center of the screen
-        add(RingBurst(position: size / 2, size: 80.0));
+        // No centre ring here: a RingBurst at screen-centre looks identical to a
+        // correct-tap pop (added at the tapped object in _onCorrectTap) but with
+        // no object under it, so it reads as a phantom tap. The slide-in banner
+        // below is the milestone cue, consistent with the other milestones.
         break;
       case 100:
         message = "Sharp Focus!";
@@ -558,6 +588,8 @@ class DttGame extends FlameGame {
     _audio?.play('wrong_tap.ogg');
     _haptics?.wrong();
 
+    // INTEGRITY (Feature M): forbidden penalty + combo-reset are frenzy-agnostic —
+    // the sprint never softens inhibition.
     _scoreManager.onPenaltyTap();
     _timerManager.addTime(-GameConstants.kForbiddenTimePenalty);
 
@@ -598,6 +630,9 @@ class DttGame extends FlameGame {
     _audio?.play('wrong_tap.ogg');
     _haptics?.wrong();
 
+    // INTEGRITY (Feature M): the bomb keeps its full penalty and combo-reset even
+    // during Frenzy Mode — the double-points sprint is a deliberate temptation
+    // trap, so "tap wildly" must still punish a bomb. Penalty is frenzy-agnostic.
     _scoreManager.onPenaltyTap();
     _timerManager.addTime(-GameConstants.kBombTimePenalty);
 
@@ -630,11 +665,23 @@ class DttGame extends FlameGame {
   /// by the GameScreen when the modal is submitted. Reference: §6.
   void resolveCheckpoint(List<String> selected) {
     if (_activeCheckpoint == null) return;
-    final double delta = _checkpointManager.resolve(selected);
-    _timerManager.addTime(delta);
+    final CheckpointOutcome outcome = _checkpointManager.resolve(selected);
+    _timerManager.addTime(outcome.timeDelta);
     _activeCheckpoint = null;
     controller.state.checkpointActive.value = false;
     paused = false;
+
+    // Acing the checkpoint ignites Frenzy Mode (Feature M): a 5 s double-points
+    // sprint with an unmistakable gold edge cue (steady when reduce-flashing).
+    if (outcome.perfect) {
+      _scoreManager.startFrenzy();
+      _frenzyEffect?.removeFromParent();
+      _frenzyEffect = FrenzyEdgeEffect(reduced: _reduceFlashing);
+      add(_frenzyEffect!);
+      _audio?.play('frenzytick.ogg');
+      _haptics?.milestone();
+    }
+
     if (_timerManager.isExpired) {
       _endRound();
     }
@@ -653,6 +700,14 @@ class DttGame extends FlameGame {
   /// Plays game_over or new_best audio depending on result.
   void _endRound() {
     _roundEnded = true;
+
+    // Kill any in-flight Frenzy so a sprint started near 0:00 can't leave a gold
+    // edge ticking on the Game Over screen (Feature M). update() early-returns
+    // once _roundEnded, so the effect must be removed explicitly here.
+    _scoreManager.endFrenzy();
+    _frenzyEffect?.removeFromParent();
+    _frenzyEffect = null;
+
     final score = controller.state.score.value;
     // Persist best score on the timer-end path too. In Burst mode lives never
     // reach 0, so LifeManager's save never fires; without this a timed-out

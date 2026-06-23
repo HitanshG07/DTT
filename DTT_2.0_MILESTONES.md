@@ -102,41 +102,166 @@ Split into three gated sub-phases: **4A** difficulty engine → **4B** stars/pro
 #### Phase 4C-1 — Map screen (render + data, no flow changes)
 | # | Milestone | Done-when |
 |---|---|---|
-| **M4C1.1** | `[ ]` Winding-path map screen | 30 nodes, 6 world segments (banners/tint), scroll, auto-scroll to current |
-| **M4C1.2** | `[ ]` Locks + stars from progress | Each node's locked/unlocked + star count read from `ProgressService` (`getAllStars`/`isUnlocked`) |
-| **M4C1.3** | `[ ]` Reachable, flow untouched | Map on its own route; existing nav unchanged; node taps a no-op for now |
-| **M4C1.4** | `[ ]` Widget test + green | Renders 30 nodes with correct locks/stars from mocked prefs; `analyze` clean, `test` green |
+| **M4C1.1** | `[x]` Winding-path map screen | 30 nodes, 6 world segments (banners/tint), serpentine layout, scroll, auto-scroll to current node |
+| **M4C1.2** | `[x]` Locks + stars from progress | Each node's locked/unlocked + 3-pip star count read from `ProgressService` (`getAllStars`; unlock = prev ≥1★) |
+| **M4C1.3** | `[x]` Reachable, flow untouched | Map on its own `/map` route; existing nav unchanged; node taps a no-op (`_onNodeTap`) for now |
+| **M4C1.4** | `[x]` Widget test + green | `map_screen_test.dart`: 5 tests (30 nodes, lock on L2 fresh, L2 unlock after L1★, star pips, tap no-op); `analyze` clean, `test` green (106/106) |
 
-**4C-1 gate → 4C-2:** M4C1.1–M4C1.4 `[x]`; `analyze` clean; `test` green.
+**4C-1 gate → 4C-2:** M4C1.1–M4C1.4 `[x]`; `analyze` clean; `test` green. ✅ **PASSED.**
 
 #### Phase 4C-2 — Navigation flow (wire it in)
 | # | Milestone | Done-when |
 |---|---|---|
-| **M4C2.1** | `[ ]` Level threaded through | `forbidden-intro(level)` → `RealGameController(level:)`; node tap launches that level |
-| **M4C2.2** | `[ ]` Full loop | `Start → Map → node → game → Game Over → back to Map`; Game Over returns to Map |
-| **M4C2.3** | `[ ]` Device verification | Picking a node plays that level; clearing awards/saves stars & unlocks next; survives restart |
+| **M4C2.1** | `[x]` Level threaded through | Map node tap → `/forbidden-intro` with `{'level': n}`; `app.dart` reads it → `ForbiddenIntroScreen(level:)` → `RealGameController(level:)`; RETRY replays same level |
+| **M4C2.2** | `[x]` Full loop | `Start → Map → node → intro(level) → game → Game Over → Map`; PLAY opens map; Game Over "MAP" button returns (refreshed); map reloads stars on return |
+| **M4C2.3** | `[x]` Device verification | **Verified on emulator-5554** (shots `dtt_shots/H0*`): PLAY→Map; tapping Level 2 launched its intro (forbidden=circle) → Level-2 game; Game Over showed the new **MAP** button + score-graded stars; MAP returned to a refreshed map. Gating proven: L1 ★★★ ⇒ L2 unlocked; a 0-score L2 run left L3 **locked**. Persistence: L1 ★★★ + BEST 1520 loaded on a fresh launch (survives restart). |
 
-**4C-2 gate → Phase 5:** M4C2.1–M4C2.3 `[x]`; `analyze` clean; `test` green; verified on emulator.
+**4C-2 gate → Phase 5:** M4C2.1–M4C2.3 `[x]`; `analyze` clean; `test` green (108/108); verified on emulator. ✅ **PASSED.**
 
 ---
 
-## Phase 5 — Classic Falling as optional mode + polish
+## Phase 5 — Modes, Modifiers & Accelerated Progression
+
+> **Replanned 2026-06-22.** The old "revive falling as Zen + chores" Phase 5 was dropped.
+> Scope now: Practice Mode, Endless Burst, a campaign-baked Modifier system (`blind`,
+> `dualTarget`, `ruleFlip`, `taskSwitch`, `nBack`), and an accelerated "tasting menu" 30-level
+> curve. Full narrative in `DTT_2.0_ROADMAP.md` §8. Sub-phases are gated independently.
+
+### Phase 5.0 — Documentation (do FIRST; docs only, no code)
+| # | Milestone | Done-when |
+|---|---|---|
+| **M5.0.1** | `[ ]` `DTT_2.0_ROADMAP.md` §8 Phase 5 | narrative: modes-vs-modifiers, modifier→hook table, tasting-menu progression, review rulings, the *why* |
+| **M5.0.2** | `[ ]` `DTT_2.0_MILESTONES.md` Phase 5 | this section (Part A + 5A–5H tables + gates) |
+| **M5.0.3** | `[ ]` `PROJECT_PROGRESS.md` Phase 5 | table row (🔵 planned) + per-phase section listing 5A–5H as not started |
+| **M5.0.4** | `[ ]` Cross-check | the three docs + plan agree (sub-phase names, gates, guardrails) |
+
+**5.0 gate → Part A:** M5.0.1–M5.0.4 `[x]`. (Docs only — no build/test gate.)
+
+### Part A — Dev utility: unlock all levels (do first)
+| # | Milestone | Done-when |
+|---|---|---|
+| **MA.1** | `[x]` `DebugFlags.unlockAllLevels` + short-circuit | `ProgressService.isUnlocked` & `MapScreen._isUnlocked` return `true` when on; `getStars` unchanged |
+| **MA.2** | `[x]` `[DEV UNLOCK]` ship-safety badge | semi-transparent red corner badge on `MapScreen` iff flag on |
+| **MA.3** | `[x]` Tests | progress + map tests assert all-unlocked when on, gated when off |
+
+**Part A gate → 5A:** MA.1–MA.3 `[x]`; `analyze` clean; `test` green.
+
+### Hotfix H — Humane difficulty caps (L21–30 only)
+Device-testing L30 (via dev-unlock) showed the late campaign was **humanly impossible**, not
+hard-but-fair: objects spawned/despawned too fast and shrank to a dot, so shapes could not be
+*identified* in time (the 48 px hitbox stayed tappable, but you couldn't tell forbidden/bomb/correct
+apart). **Decision:** raise the human-possible floors so difficulty comes from *cognitive load*, not
+sub-human perception/motor demands — scoped to **worlds 5 & 6 only**; **L1–20 stay exactly as they
+are**. Two compounding causes fixed in `level_generator.dart` + `burst_object.dart`.
 
 | # | Milestone | Done-when |
 |---|---|---|
-| **M5.1** | `[ ]` Surface `GameMode.zen` ("Endless / Zen") | Dormant falling path reachable via mode select on Start/Map; lives, no timer; no new engine work |
-| **M5.2** | `[ ]` Both modes share one `GameState` contract | No divergence; Zen ends on lives==0, Burst on timer==0 |
-| **M5.3** | `[ ]` Resolve `VISUAL_TODO.md` cosmetics | All 3 deferred items fixed & verified |
-| **M5.4** | `[ ]` Audio asset pass | Real `.ogg` files in `assets/audio/`; SFX/pitch-ladder audibly working |
-| **M5.5** | `[ ]` Marketing-honesty copy pass | Store/UI copy paradigm-based; **no** "clinically proven" claims |
-| **M5.6** | `[ ]` Final regression + ship gate | Mode switch routes correctly; full suite green; both modes stable on device |
+| **MH.1** | `[ ]` Conditional caps (L21–30) | `humaneCapsFrom = 21` + `topWorlds` gate; lerp endpoints unchanged so L1–20 are byte-for-byte identical; L21–30: lifetime ≥ 1.7 s, spawn ≤ 1.4/s, ≤ 7 on-screen, waves ≤ 6, size 42–52 px |
+| **MH.2** | `[ ]` Data-driven shrink floor | `LevelConfig.minVisualScale` (default 0.0 = shrink-to-zero) + `copyWith`; generator sets 0.5 for L21–30; `BurstObject.visualScale` reads it; shapes never shrink below half on the top 2 worlds |
+| **MH.3** | `[ ]` Tests updated + added | L1–20 keep original caps (≥ 1.1 s, 32–52 px, ≤ 9, ≤ 7); L21–30 assert eased caps + `minVisualScale` 0.0/0.5 split; `visualScale` floors at config value; suite green |
+| **MH.4** | `[ ]` Star-threshold sanity | easier L21–30 ⇒ higher scores ⇒ confirm L29/L30 overrides keep 3-star a stretch; hand-override only, no curve change |
+| **MH.5** | `[ ]` Bug-MS: score-50 centre pop | stray pop-in fires in screen centre when score crosses 50 (suspect milestone overlay / detached `ObjectPopIn`); trace trigger, then remove or make it a deliberate cue; regression-test it |
+| **MH.6** | `[ ]` Device verify (dev-unlock) | L26–30 human-clearable (shapes readable to expiry, no firehose); L1–20 feel unchanged; no stray centre-pop at score 50 |
 
-**Ship gate:** M5.1–M5.6 `[x]`; `analyze` clean; full `test` green; both modes verified on device.
+**Hotfix H gate → 5A:** MH.1–MH.6 `[x]`; `analyze` clean; full `test` green; device-verified at L30 +
+L1 (still gentle) + score-50 (no stray pop). _(Guardrail recorded: **≤ 2 simultaneous modifiers** —
+enforced in 5B/5H when modifiers land.)_
+
+### Phase 5A — Practice Mode
+| # | Milestone | Done-when |
+|---|---|---|
+| **M5A.1** | `[ ]` `practice` flag plumbed | map → intro → controller → GameOver (default `false`) |
+| **M5A.2** | `[ ]` Long-press entry | long-press an unlocked node → that level in practice; normal tap = normal play |
+| **M5A.3** | `[ ]` No-reward contract + copy | skips `saveStars` **and** `saveBestScore`; intro "PRACTICE RUN — NO SCORE SAVED"; GameOver labelled "PRACTICE" |
+| **M5A.4** | `[ ]` Tests | practice leaves stars + best unchanged; non-practice still saves |
+| **M5A.5** | `[ ]` Device verify | long-press → practice → finish → map stars & Start "BEST" unchanged |
+
+**5A gate → 5B:** M5A.1–M5A.5 `[x]`; `analyze` clean; `test` green; device-verified.
+
+### Phase 5B — Modifier framework + `blind` (+ coachmark)
+| # | Milestone | Done-when |
+|---|---|---|
+| **M5B.1** | `[ ]` `RoundModifier` enum + `LevelConfig.modifiers` | `Set<RoundModifier>` (default `{}`) + `copyWith`; threaded to `DttGame` |
+| **M5B.2** | `[ ]` `blind` hides AVOID | `HudOverlay` hides forbidden thumbnail when `blind` active |
+| **M5B.3** | `[ ]` `blind` intro lengthen + copy | intro ~3.5s + "Memorize this! It will be hidden." |
+| **M5B.4** | `[ ]` First-encounter coachmark | one-time per-modifier modal gated by `dtt_seen_modifier_<name>`; `blind` registers its blurb |
+| **M5B.5** | `[ ]` Tests | HUD hides under `blind`; config carries set; intro duration switches; coachmark shows once |
+| **M5B.6** | `[ ]` Device verify | blind: AVOID gone mid-round; coachmark first time only |
+
+**5B gate → 5C:** M5B.1–M5B.6 `[x]`; `analyze` clean; `test` green; device-verified.
+
+### Phase 5C — Endless Burst (pure survival, score-gated ramp)
+| # | Milestone | Done-when |
+|---|---|---|
+| **M5C.1** | `[ ]` `GameMode.endless` path | no level number, **zero** modifiers |
+| **M5C.2** | `[ ]` Survival-by-time economy | correct `+time`, mistakes `−time`, ends at 0; score accrues |
+| **M5C.3** | `[ ]` Continuous ramp via score→`t` | `getEndlessConfig(score)` maps `t=(score/kEndlessRampScore).clamp(0,1)` → dial lerps, bypassing the level int |
+| **M5C.4** | `[ ]` Best-score persistence + entry | `dtt_endless_best`; reachable from Start/Map |
+| **M5C.5** | `[ ]` Tests | `getEndlessConfig` monotonic & clamps; time economy; best-of |
+| **M5C.6** | `[ ]` Device verify | skill extends run; smooth ramp; ends at 0; best persists |
+
+**5C gate → 5D:** M5C.1–M5C.6 `[x]`; `analyze` clean; `test` green; device-verified.
+
+### Phase 5D — `dualTarget`
+| # | Milestone | Done-when |
+|---|---|---|
+| **M5D.1** | `[ ]` Forbidden-set support | track a **set** of forbidden shapes; `isForbidden` iff `shape ∈ set`; bomb excluded |
+| **M5D.2** | `[ ]` Intro shows both | forbidden-intro renders both shapes |
+| **M5D.3** | `[ ]` Tests + combo smoke-test | iff-in-set across pool; two distinct forbidden; **`blind+dualTarget` flag-composition test** |
+| **M5D.4** | `[ ]` Device verify | two AVOID shapes, both punished |
+
+**5D gate → 5E:** M5D.1–M5D.4 `[x]`; `analyze` clean; `test` green; device-verified.
+
+### Phase 5E — `ruleFlip` (inversion only)
+| # | Milestone | Done-when |
+|---|---|---|
+| **M5E.1** | `[ ]` Inversion | cued window inverts tap-scoring; reverts cleanly |
+| **M5E.2** | `[ ]` **Bomb immunity** | `if (obj.isBomb) { bomb penalty; return; }` **before** inversion — absolute No-Go |
+| **M5E.3** | `[ ]` REVERSE cue (default) | bg `#111111`→`#1E3A8A` + center "REVERSE!" banner while inverted |
+| **M5E.4** | `[ ]` **Reduce-flashing fallback (explicit)** | toggle ON → persistent `#1E3A8A` inset border + static "REVERSE" label, no bg flash; **dedicated test** |
+| **M5E.5** | `[ ]` **No overlap with `blind`** | banner center/bg-led; never obscures the hidden AVOID slot |
+| **M5E.6** | `[ ]` Tests | inverted only in window; bomb still penalised; reduce-flashing test asserts border+label, not bg animation |
+| **M5E.7** | `[ ]` Device verify | obvious with & without reduce-flashing; bomb never a target |
+
+**5E gate → 5F:** M5E.1–M5E.7 `[x]`; `analyze` clean; `test` green; device-verified.
+
+### Phase 5F — `taskSwitch` (scheduled flipping)
+| # | Milestone | Done-when |
+|---|---|---|
+| **M5F.1** | `[ ]` Scheduled flips | flips on a cadence reusing 5E inversion + cue; interval from config |
+| **M5F.2** | `[ ]` Clean state at round end | no dangling inversion on `_endRound`/pause; bomb immunity holds |
+| **M5F.3** | `[ ]` Tests | flips on schedule; each toggles inversion + cue; reverts by round end |
+| **M5F.4** | `[ ]` Device verify | repeated flips legible, not a flicker storm |
+
+**5F gate → 5G:** M5F.1–M5F.4 `[x]`; `analyze` clean; `test` green; device-verified.
+
+### Phase 5G — `nBack` checkpoint variant
+| # | Milestone | Done-when |
+|---|---|---|
+| **M5G.1** | `[ ]` **Wave-history queue** | `CheckpointManager` bounded `Queue<List<ShapeType>>`; push each wave; `len>3 → removeFirst()` (NFR-09) |
+| **M5G.2** | `[ ]` `CheckpointSpec` carries n-back | flag selects n-back vs set/order; `N` configurable (default 2) |
+| **M5G.3** | `[ ]` Overlay prompt | "Which shape was in the wave **N** ago?"; standard checkpoint economy (no extra live penalty) |
+| **M5G.4** | `[ ]` Tests | correct == wave-N-ago shape; no phantoms; `+/-` time; queue bounded |
+| **M5G.5** | `[ ]` Device verify | answerable paused; resume clean; fair under load |
+
+**5G gate → 5H:** M5G.1–M5G.5 `[x]`; `analyze` clean; `test` green; device-verified.
+
+### Phase 5H — Progression rewrite + surfacing + ship copy
+| # | Milestone | Done-when |
+|---|---|---|
+| **M5H.1** | `[ ]` `getModifiersForLevel(int)` + re-tuned curve | returns the modifier set per the progression table; mechanics front-loaded; **speed eased on intro levels**; caps + override map kept |
+| **M5H.2** | `[ ]` World themes updated | `_worlds` = Foundation / Cognitive Shift / Interference / Working Memory / Dual Load / Gauntlet |
+| **M5H.3** | `[ ]` Affected tests reworked + green | `level_config_test`, `forbidden_change_test`, map tests; `getModifiersForLevel` asserted per level |
+| **M5H.4** | `[ ]` Playtest W1–W3 | sawtooth holds; every modifier seen by ~L9; intro levels feel like breathers |
+| **M5H.5** | `[ ]` Playtest W4–W6 | W5 combos read cleanly; W6 gauntlet hard but human-possible |
+| **M5H.6** | `[ ]` Honesty copy pass | paradigm-based naming; **no "clinically proven"** claims |
+
+**Ship gate:** M5H.1–M5H.6 `[x]`; `analyze` clean; full `test` green; campaign verified on device.
 
 ---
 
 ## Tracking rules
 1. **One phase in flight at a time.** Don't open Phase N+1 milestones until Phase N's gate row is fully `[x]`.
 2. **Every milestone is device-or-test verifiable** — if you can't state its Done-when as a pass/fail check, it isn't a milestone yet.
-3. **Guardrails are not milestones to skip:** the 48px hitbox floor (M1.2), the mandatory flashing toggle shipping *with* the blast (M2.4), one-ScoreManager/one-forbidden-source, **no hidden physics manipulation (data integrity — Phase 4A caps/clamps + rejected comeback assist)**, and **generated difficulty stays hand-overridable** all survive every phase.
+3. **Guardrails are not milestones to skip:** the 48px hitbox floor (M1.2), the mandatory flashing toggle shipping *with* the blast (M2.4) **and the REVERSE cue's non-flashing fallback (M5E.4)**, one-ScoreManager/one-forbidden-source (`dualTarget` widens it to a *declared set*), **the bomb as an absolute No-Go — immune to `ruleFlip` (M5E.2)**, **no hidden physics manipulation (data integrity — Phase 4A caps/clamps + rejected comeback assist; Practice Mode is the only assist and is star-disqualifying)**, and **generated difficulty stays hand-overridable** all survive every phase.
 4. Update each `[ ]` → `[~]` → `[x]` as you go; the gate rows are the only thing that authorizes the next phase.

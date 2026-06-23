@@ -20,10 +20,36 @@ class CheckpointManager {
   double _elapsed = 0.0;
   final List<String> _windowTokens = <String>[];
 
+  /// Round-level tally for the Memory rating (Feature M). Counts every
+  /// checkpoint resolved this round and how many were aced (fully correct).
+  /// These persist across the per-window [reset]; the manager is recreated per
+  /// round, so they start at 0 each round.
+  int _shown = 0;
+  int _perfect = 0;
+
   CheckpointManager({required this.spec, required this.random});
 
   /// Whether checkpoints are active for this level.
   bool get enabled => spec.enabled;
+
+  /// Checkpoints resolved this round (the denominator of the Memory rating).
+  int get checkpointsShown => _shown;
+
+  /// Checkpoints aced (fully correct) this round (the numerator).
+  int get checkpointsPerfect => _perfect;
+
+  /// Memory star rating (0–3) for a round, from the fraction of checkpoints
+  /// aced: all → 3★, ≥ 2⁄3 → 2★, ≥ 1⁄3 → 1★, else 0. Returns 0 when none were
+  /// shown (levels without checkpoints earn no Memory rating). Pure + static so
+  /// it is trivially unit-testable and the only source of the thresholds.
+  static int memoryStarsFor(int shown, int perfect) {
+    if (shown <= 0) return 0;
+    final double ratio = perfect / shown;
+    if (ratio >= 1.0) return 3;
+    if (ratio >= 2 / 3) return 2;
+    if (ratio >= 1 / 3) return 1;
+    return 0;
+  }
 
   /// Tokens shown this window, in the order seen (the correct answer set).
   List<String> get windowTokens => List<String>.unmodifiable(_windowTokens);
@@ -71,13 +97,22 @@ class CheckpointManager {
     );
   }
 
-  /// Grades [selected] against the window's seen tokens and returns the time
-  /// delta to apply (+reward on success, -penalty on failure). Resets the
-  /// window afterwards so the next window starts clean.
-  double resolve(List<String> selected) {
+  /// Grades [selected] against the window's seen tokens and returns the
+  /// [CheckpointOutcome] (the time delta to apply + whether it was aced). Updates
+  /// the round tally and resets the window so the next one starts clean.
+  ///
+  /// Time stays all-or-nothing (+reward on a perfect recall, -penalty otherwise),
+  /// as before; a perfect recall additionally ignites Frenzy Mode in the engine
+  /// (Feature M) — that reward is handled by the caller via [CheckpointOutcome.perfect].
+  CheckpointOutcome resolve(List<String> selected) {
     final correct = _isCorrect(selected);
+    _shown++;
+    if (correct) _perfect++;
     reset();
-    return correct ? spec.rewardSeconds : -spec.penaltySeconds;
+    return CheckpointOutcome(
+      timeDelta: correct ? spec.rewardSeconds : -spec.penaltySeconds,
+      perfect: correct,
+    );
   }
 
   bool _isCorrect(List<String> selected) {
@@ -99,4 +134,16 @@ class CheckpointManager {
     _windowTokens.clear();
     _elapsed = 0.0;
   }
+}
+
+/// The graded result of a memory checkpoint (Feature M).
+///
+/// [timeDelta] is applied to the round clock (+reward / -penalty, all-or-nothing
+/// as before). [perfect] is true iff the whole set was recalled correctly — the
+/// engine uses it to ignite Frenzy Mode and to tally the Memory rating.
+class CheckpointOutcome {
+  final double timeDelta;
+  final bool perfect;
+
+  const CheckpointOutcome({required this.timeDelta, required this.perfect});
 }

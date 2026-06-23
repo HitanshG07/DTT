@@ -1,6 +1,8 @@
 # Don't Tap That 2.0 — Spatial Burst Roadmap
 
-> **Status:** Phase 0 complete & verified (not yet committed). Phases 1–5 not started.
+> **Status:** Phases 0–4 complete & green (`analyze` clean, 111/111 tests; 4C device-verified).
+> Phase 5 **replanned 2026-06-22** (Modes, Modifiers & Accelerated Progression — see §8) and
+> documented; implementation not yet started.
 > **Source of truth:** `Dont_Tap_That_2.0_Master_Plan.docx` (§ references below point to it).
 > **This document:** the goal, the per-phase work, the files touched, the data-model
 > changes, the tests, and the acceptance gate for each phase. Each phase is multi-day and
@@ -55,16 +57,17 @@ working-memory** game, without throwing away the verified engine we already have
 
 ### 2.1 Fork, don't mutate — `GameMode { burst, zen }`
 `FallingObject` and the falling spawn path are the **verified, fully-tested Phase-0
-engine**. Phase 5 explicitly brings falling back as an optional "Zen" mode. So we
-**fork** rather than rewrite in place:
+engine**. So we **forked** rather than rewrote in place:
 - Add a top-level `GameMode` enum.
 - `DttGame` branches on it: `burst` uses `BurstObject` + wave/2D spawning + timer;
   `zen` uses the existing `FallingObject` + falling spawn untouched.
-- Phases 1–4 build and ship `burst` as the active mode. `zen` stays dormant but intact
-  until Phase 5 surfaces it in the UI.
+- Phases 1–4 build and ship `burst` as the active mode. `zen` stays dormant but intact.
 
-**Why:** protects the 7 verified fixes, avoids a risky big-bang rewrite, and means Phase 5
-is "expose what already works" instead of "rebuild the old engine."
+**Why:** protects the 7 verified fixes and avoids a risky big-bang rewrite. **Note (Phase 5
+replan, 2026-06-22):** Phase 5 no longer surfaces `zen` — reviving the old falling engine as a
+"Zen" mode was dropped as low-value. `zen` remains a dormant, tested code path; the new
+**Endless Burst** mode (new engine) replaces its replayability role and **Practice Mode** serves
+the limited-assist intent. See §8.
 
 ### 2.2 The `GameState` contract grows additively
 Every phase only **adds** `ValueNotifier`s to `GameState` (and disposes them). Existing
@@ -265,7 +268,9 @@ sub-phases (4A logic → 4B stars → 4C map/UI). Doc §8, §9.
 - **Human-possible hard caps (never crossed by the generator):** recall ≤3 tokens (4 only at
   L26+); object lifetime ≥1.1s; hitbox ≥48px; bomb chance ≤30%; forbidden-rotation interval
   ≥12s; ~6–8% difficulty step per level. "Hard" = combining *fair* demands under time
-  pressure, never an inhuman wall.
+  pressure, never an inhuman wall. **Refined by Hotfix H (2026-06-22):** the top 2 worlds
+  (L21–30) get *stricter* humane floors — lifetime ≥1.7s, size 42–52px, ≥50% visual-shrink floor,
+  ≤7 on-screen, waves ≤6, spawn ≤1.4/s — after L30 tested as humanly impossible; L1–20 unchanged.
 
 ### Phase 4A — Difficulty engine (pure logic, no UI)
 - `StarThresholds` (3 cutoffs, `starsFor(score)`); `LevelConfig.starThresholds`.
@@ -309,34 +314,85 @@ Zen mode UI, Practice Mode, final polish (all Phase 5).
 
 ---
 
-## 8. Phase 5 — Classic Falling as optional mode + polish
+## 8. Phase 5 — Modes, Modifiers & Accelerated Progression
 
-**Goal:** surface the preserved falling engine as an optional mode and do whole-game
-polish. Doc §10.
+> **Replanned (2026-06-22).** The original Phase 5 ("revive the falling engine as a Zen mode +
+> chores") was dropped as low-value. Phase 5 now finishes the game around its **identity** — a
+> go/no-go inhibition + visual-search + working-memory trainer. The relaxation / limited-assist
+> intent the old Zen carried is served instead by **Practice Mode on the new engine**. The
+> dormant `GameMode.zen` stays dormant and is **not** surfaced.
 
-### Build
-1. **Expose `GameMode.zen`** ("Endless / Zen"): the existing fixed falling engine, **lives,
-   no timer.** No new engine work — it's the dormant path from Phase 1 made reachable
-   (mode select on Start / Map).
-2. Both modes drive the **same `GameState` contract**; only the SpawnManager variant,
-   `LevelConfig` fields, and a couple overlays differ.
-3. Per-level tuning + playtests across both modes; resolve `VISUAL_TODO.md` cosmetics;
-   audio asset pass (real `.ogg` files); store-copy honesty pass (§1 guardrail).
-4. **Honest anti-frustration tools (NOT a hidden assist — see guardrail):**
-   - **Practice Mode:** replay any level with the **real, unaltered physics** but **award no
-     stars** and **record no progress metric**. The sanctioned way to grind a hard level
-     without corrupting cognitive data.
-   - **Visual hint (optional):** e.g. hold the forbidden-shape cue on screen longer. A
-     *perceptual* aid, not a physics change; may also be star-disqualifying if used.
-   Both are explicit and player-initiated. The dynamic "comeback assist" idea is **rejected**.
+**Goal:** add two real modes + a composable cognitive-modifier system, and re-tune the 30-level
+curve so the depth is felt early (not buried at L20–30).
 
-### Tests
-- Mode switch routes to the correct engine; Zen ends on lives==0, Burst on timer==0.
-- No `GameState` contract divergence between modes.
-- Regression sweep of all prior phases.
+### Decisions (locked in review)
+- **Modifiers are CAMPAIGN-FLAVOR ONLY** — a `Set<RoundModifier>` baked into levels; **no**
+  player-selectable toggles/menus (no menu bloat, no invalid combos, curated curve guaranteed).
+- **Endless = pure survival, NO modifiers** — a raw processing-speed test.
+- **Accelerated "tasting menu"** — every modifier introduced by ~L9.
 
-### Acceptance gate
-Both modes selectable and stable; full suite green; cosmetics resolved; ship-ready copy.
+### The two modes
+- **Practice Mode** — replay any level with the **real, unaltered physics** but **no stars and no
+  best-score saved** (the sanctioned, star-disqualifying grind tool; honours the
+  no-hidden-assist guardrail). Entry: **long-press a map node**.
+- **Endless Burst** — survival on the burst engine with **no modifiers**; difficulty ramps
+  **continuously by score** (`LevelGenerator.getEndlessConfig(score)` → existing dial lerps,
+  bypassing the level integer). Survival-by-time (correct +time, mistakes −time, ends at 0).
+  Separate `dtt_endless_best` key.
+
+### The modifier system (one engine, a few flags)
+Five "modes" people imagine are really one core loop with twists, so they ship as a composable
+`Set<RoundModifier>` on `LevelConfig` — not separate screens:
+
+| Modifier | Paradigm | Changes | Hook |
+|---|---|---|---|
+| `blind` | working memory | hide the AVOID reminder after the intro | `HudOverlay` |
+| `dualTarget` | dual-task | two forbidden shapes | `ForbiddenManager`/`SpawnManager` |
+| `ruleFlip` | response inhibition | invert the rule for a cued window | tap-scoring in `DttGame` |
+| `taskSwitch` | set-shifting | flip the rule on a cadence | scheduled `ruleFlip` |
+| `nBack` | working-memory span | "shape seen N waves ago" | checkpoint + bounded wave-history queue |
+
+### Accelerated progression (re-tunes the `LevelGenerator`)
+Speed is **dialed back on each modifier's introduction level** (a mechanical breather while
+learning) so the sawtooth flow holds.
+
+| World | Levels | Theme | Mechanics / modifiers |
+|---|---|---|---|
+| 1 | 1–5 | The Foundation | L1–3 pure burst · L4 bombs · L5 set-recall checkpoints |
+| 2 | 6–10 | The Cognitive Shift | L6 `blind` · L7 `dualTarget` · L8 `ruleFlip` · L9 `nBack` · L10 mix (slow/easy) |
+| 3 | 11–15 | Interference | faster; heavy `taskSwitch` + high bombs |
+| 4 | 16–20 | Working Memory | heavy `blind` + `nBack`; moderate speed |
+| 5 | 21–25 | Dual Load | combos: L21 `blind+dualTarget` · L24 `ruleFlip+nBack` |
+| 6 | 26–30 | The Gauntlet | all dials maxed; rapidly alternating modifiers |
+
+### Critical design rulings (from review)
+- **Bomb is immune to `ruleFlip`** — always an absolute No-Go; checked **before** any inversion,
+  or we'd train players to rapid-tap the highest-threat object.
+- **REVERSE cue has a concrete reduce-flashing fallback** — when the toggle is on, a persistent
+  `#1E3A8A` inset border + a **static** "REVERSE" label replace the animated bg-shift (no strobe).
+- **`nBack` uses the standard checkpoint economy** (no extra live-time penalty) and needs a
+  bounded `Queue<List<ShapeType>>` wave history in `CheckpointManager` (NFR-09 memory budget).
+- **First-encounter coachmark** — a one-time per-modifier modal so a new mechanic never reads as
+  a bug, gated by a `dtt_seen_modifier_<name>` pref.
+
+### Sub-phases (each gated: `analyze` clean + `test` green + device check)
+`5.0 docs` → `Part A dev-unlock` → `Hotfix H humane caps` → `5A Practice` → `5B framework+blind` →
+`5C Endless` → `5D dualTarget` → `5E ruleFlip` → `5F taskSwitch` → `5G nBack` →
+`5H progression rewrite + ship copy`.
+Full milestone tables: `DTT_2.0_MILESTONES.md` (Phase 5) and the implementation plan.
+
+**Hotfix H — humane difficulty caps (L21–30 only).** Dev-unlock playtesting of L30 showed the late
+campaign was *humanly impossible* (objects too fast/small to identify, shrinking to a dot). Fix:
+raise the human-possible floors on **worlds 5 & 6 only** (L1–20 untouched) so difficulty comes from
+**cognitive load**, not sub-human perception/motor demands — lifetime ≥ 1.7 s, size 42–52 px, a
+≥ 50 % visual-shrink floor (data-driven via `LevelConfig.minVisualScale`), ≤ 7 on-screen, waves ≤ 6,
+spawn ≤ 1.4/s. Also recorded: **≤ 2 simultaneous modifiers** ever (cap-the-chaos guardrail, enforced
+in 5B/5H), and **Bug-MS** (a stray centre "pop" when score crosses 50).
+
+### Out of scope (parked as future ideas)
+Feedback/feel features (mistake replay, tap heatmap, stop-signal, focus-sprint), Calibration,
+Calm mode, Daily challenge, custom round builder, seed codes, cosmetics, full tutorial. Audio
+assets + `VISUAL_TODO.md` cosmetics + store-copy honesty still ride along (copy pass in 5H).
 
 ---
 
@@ -356,7 +412,7 @@ Phase 0 (commit) ─> Phase 1 (engine) ─> Phase 2 (bomb/time) ─> Phase 3 (me
    Phase 4C (map UI: chaptered winding path + navigation)
         │
         v
-   Phase 5 (Zen mode + Practice Mode + polish)
+   Phase 5 (Practice + Endless Burst + Modifier system + accelerated 30-level progression)
 ```
 
 - **Hard gate between every phase:** prior phase on a physical/emulator device, `analyze`

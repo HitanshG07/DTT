@@ -80,16 +80,17 @@ void main() {
           lessThanOrEqualTo(_spec.specialsPerWindow + _spec.distractorCount));
     });
 
-    test('set-recall: correct membership (any order) gives +reward and resets', () {
+    test('set-recall: correct membership (any order) gives +reward, perfect, resets', () {
       final m = CheckpointManager(spec: _spec, random: Random(5));
       final seen = [m.assignToken()!, m.assignToken()!, m.assignToken()!];
 
-      final delta = m.resolve(seen.reversed.toList()); // order should NOT matter
-      expect(delta, _spec.rewardSeconds);
+      final out = m.resolve(seen.reversed.toList()); // order should NOT matter
+      expect(out.timeDelta, _spec.rewardSeconds);
+      expect(out.perfect, isTrue);
       expect(m.windowTokens, isEmpty, reason: 'window resets after resolve');
     });
 
-    test('set-recall: wrong membership gives -penalty', () {
+    test('set-recall: wrong membership gives -penalty and is not perfect', () {
       final m = CheckpointManager(spec: _spec, random: Random(5));
       m.assignToken();
       m.assignToken();
@@ -100,18 +101,50 @@ void main() {
           .take(3)
           .toList();
 
-      expect(m.resolve(wrong), -_spec.penaltySeconds);
+      final out = m.resolve(wrong);
+      expect(out.timeDelta, -_spec.penaltySeconds);
+      expect(out.perfect, isFalse);
     });
 
     test('order-recall: correct order rewards, wrong order penalises', () {
       final m1 = CheckpointManager(spec: _orderSpec, random: Random(7));
       final seen1 = [m1.assignToken()!, m1.assignToken()!, m1.assignToken()!];
-      expect(m1.resolve(seen1), _orderSpec.rewardSeconds);
+      expect(m1.resolve(seen1).timeDelta, _orderSpec.rewardSeconds);
 
       final m2 = CheckpointManager(spec: _orderSpec, random: Random(7));
       final seen2 = [m2.assignToken()!, m2.assignToken()!, m2.assignToken()!];
-      expect(m2.resolve(seen2.reversed.toList()), -_orderSpec.penaltySeconds,
+      final out2 = m2.resolve(seen2.reversed.toList());
+      expect(out2.timeDelta, -_orderSpec.penaltySeconds,
           reason: 'reversed order is wrong when orderMatters');
+      expect(out2.perfect, isFalse);
+    });
+
+    test('round tally counts shown + perfect across windows (Feature M)', () {
+      final m = CheckpointManager(spec: _spec, random: Random(9));
+      // Window 1: aced.
+      final w1 = [m.assignToken()!, m.assignToken()!, m.assignToken()!];
+      m.resolve(w1);
+      // Window 2: failed (a token not in the new window).
+      m.assignToken();
+      m.assignToken();
+      m.assignToken();
+      final wrong = _spec.tokens
+          .where((t) => !m.windowTokens.contains(t))
+          .take(3)
+          .toList();
+      m.resolve(wrong);
+
+      expect(m.checkpointsShown, 2, reason: 'two checkpoints resolved');
+      expect(m.checkpointsPerfect, 1, reason: 'only the first was aced');
+    });
+
+    test('memoryStarsFor: ratio tiers and the no-checkpoints case', () {
+      expect(CheckpointManager.memoryStarsFor(0, 0), 0); // none shown
+      expect(CheckpointManager.memoryStarsFor(3, 3), 3); // all aced
+      expect(CheckpointManager.memoryStarsFor(3, 2), 2); // 2/3
+      expect(CheckpointManager.memoryStarsFor(3, 1), 1); // 1/3
+      expect(CheckpointManager.memoryStarsFor(3, 0), 0); // none aced
+      expect(CheckpointManager.memoryStarsFor(4, 1), 0); // 0.25 < 1/3
     });
   });
 }

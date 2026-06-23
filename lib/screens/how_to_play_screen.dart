@@ -41,11 +41,10 @@ class HowToPlayScreen extends StatelessWidget {
               const Spacer(),
               // Explanation body text
               const Text(
-                "Shapes will fall from the top of the screen.\n\n"
-                "One shape is FORBIDDEN each round — shown before you start.\n\n"
-                "Tap everything except the forbidden shape.\n\n"
-                "Tap the forbidden shape and you lose a life.\n\n"
-                "You have 3 lives. When they run out, the round ends.",
+                "Shapes pop up and shrink away — tap them before they vanish.\n\n"
+                "One shape is FORBIDDEN each round — memorise it before you start. It can change mid-round, so watch the AVOID badge.\n\n"
+                "Tap everything EXCEPT the forbidden shape. Never tap the bomb.\n\n"
+                "Mistakes cost TIME, not lives: a forbidden tap −2s, a bomb −4s. Race the clock for the highest score.",
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: AppFonts.kFontBody,

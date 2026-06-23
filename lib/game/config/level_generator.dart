@@ -1,4 +1,5 @@
 import 'checkpoint_spec.dart';
+import 'game_constants.dart';
 import 'level_config.dart';
 import 'shape_type.dart';
 import 'star_thresholds.dart';
@@ -52,10 +53,22 @@ class LevelGenerator {
   static const int orderRecallFrom = 21;
 
   // Human-possible hard caps (never crossed — data-integrity / fairness).
-  static const double minLifetime = 1.1; // perceive→decide→tap floor
+  // Raised in Hotfix H: difficulty must come from cognitive load, not from
+  // sub-human perception/motor demands. A 1.1s window on a shrinking sub-32px
+  // shape among 9 objects is not "hard", it is unfair — so the floors moved up.
+  static const double minLifetime = 1.7; // perceive→decide→tap floor (was 1.1)
   static const double maxBombChance = 0.30;
   static const double minRotationInterval = 12.0;
   static const int maxRecall = 4; // working-memory span ~4±1
+  static const int maxConcurrentObjects = 7; // was 9 — readable screen (Hotfix H)
+  static const int maxWaveSize = 6; // was 7 — no firehose waves (Hotfix H)
+  static const int minObjectSize = 42; // was 32 — identifiable when shrunk (Hotfix H)
+
+  // Frenzy-aware star tuning (Feature M). A strong player who aces a checkpoint
+  // banks ~6 double-point taps during the 5 s sprint; the generated baseline
+  // anticipates this so 3-star stays a fair stretch on checkpoint levels.
+  static const int _frenzyTapsPerCheckpoint = 6; // midpoint of the 5–7 estimate
+  static const int _frenzyExpectedCombo = 4; // representative sprint combo
 
   /// Shapes in introduction order (bomb excluded — it's never a normal shape).
   static const List<ShapeType> _shapeOrder = [
@@ -137,11 +150,13 @@ class LevelGenerator {
     final Flavor flavor = flavorFor(n);
 
     // --- base continuous dials ---
-    double lifetime = _lerp(3.2, 1.1, d);
-    double spawnRate = _lerp(0.5, 1.8, d);
-    int maxObjects = _lerp(4, 9, d).round();
-    int waveSize = _lerp(3, 6, d).round();
-    int objectSize = _lerp(52, 32, d).round();
+    // Hotfix H: hard-end of each lerp eased so L30 is human-clearable. The easy
+    // end (L1) is unchanged, so early levels feel identical.
+    double lifetime = _lerp(3.2, 1.9, d);
+    double spawnRate = _lerp(0.5, 1.4, d);
+    int maxObjects = _lerp(4, 7, d).round();
+    int waveSize = _lerp(3, 5, d).round();
+    int objectSize = _lerp(52, 42, d).round();
     double bombChance = n >= bombsFrom ? _lerp(0.05, 0.30, d) : 0.0;
     double overlap = _lerp(70, 45, d);
     double roundDuration = _lerp(55, 75, d);
@@ -193,11 +208,11 @@ class LevelGenerator {
       forbiddenInterval =
           forbiddenInterval < minRotationInterval ? minRotationInterval : forbiddenInterval;
     }
-    waveSize = waveSize.clamp(3, 7);
-    maxObjects = maxObjects.clamp(4, 9);
+    waveSize = waveSize.clamp(3, maxWaveSize);
+    maxObjects = maxObjects.clamp(4, maxConcurrentObjects);
     if (waveSize > maxObjects) waveSize = maxObjects;
     specials = specials.clamp(1, maxRecall);
-    objectSize = objectSize.clamp(32, 52);
+    objectSize = objectSize.clamp(minObjectSize, 52);
 
     final CheckpointSpec checkpoint = cpEnabled
         ? CheckpointSpec(
@@ -225,7 +240,34 @@ class LevelGenerator {
       roundDuration: roundDuration,
       bombChance: bombChance,
       checkpoint: checkpoint,
-      starThresholds: starOverrides[n] ?? _baselineStars(n),
+      starThresholds: starOverrides.containsKey(n)
+          ? starOverrides[n]!
+          : _withFrenzyBonus(_baselineStars(n), cpEnabled, roundDuration, cpInterval),
+    );
+  }
+
+  /// Lifts the 2/3-star cutoffs on checkpoint levels (Feature M) by the points a
+  /// strong player banks from Frenzy sprints, so 3-star stays a fair stretch once
+  /// acing checkpoints can double-score. Non-checkpoint levels are unchanged.
+  /// Hand-overridden levels never reach here (the override wins outright).
+  static StarThresholds _withFrenzyBonus(
+    StarThresholds base,
+    bool cpEnabled,
+    double roundDuration,
+    double cpInterval,
+  ) {
+    if (!cpEnabled || cpInterval <= 0) return base;
+    final int expectedCheckpoints = (roundDuration / cpInterval).floor();
+    if (expectedCheckpoints <= 0) return base;
+    const int perCheckpoint = _frenzyTapsPerCheckpoint *
+        GameConstants.kScorePerTap *
+        (GameConstants.kFrenzyScoreMultiplier - 1) *
+        _frenzyExpectedCombo;
+    final int bonus = expectedCheckpoints * perCheckpoint;
+    return StarThresholds(
+      one: base.one, // 1-star stays the forgiving unlock gate
+      two: base.two + bonus ~/ 2,
+      three: base.three + bonus,
     );
   }
 }

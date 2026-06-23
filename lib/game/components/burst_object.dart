@@ -112,10 +112,21 @@ class BurstObject extends PositionComponent with TapCallbacks {
   /// expire is the *correct* (no-tap) outcome.
   bool get isBomb => shapeType == ShapeType.bomb;
 
-  /// Fraction of lifetime remaining, clamped to [0, 1]. Drives the visual scale
-  /// and is exposed for tests.
+  /// Smallest fraction of [_baseVisualSize] the shape is ever drawn at (Hotfix
+  /// H). The shrink-as-timer still signals urgency, but the shape never becomes
+  /// too small to *identify* (forbidden? bomb? correct?) before it expires.
+  static const double kMinVisualScale = 0.5;
+
+  /// Fraction of lifetime remaining, clamped to [0, 1]. Raw timer value; drives
+  /// [visualScale] and is exposed for tests.
   double get lifeFraction =>
       _lifetime <= 0 ? 0.0 : (_remaining / _lifetime).clamp(0.0, 1.0);
+
+  /// Visual scale applied to [_baseVisualSize] when rendering: shrinks from 1.0
+  /// at full life down to [kMinVisualScale] at expiry (never to zero), so the
+  /// shape stays readable. Exposed for tests.
+  double get visualScale =>
+      kMinVisualScale + (1.0 - kMinVisualScale) * lifeFraction;
 
   @override
   Future<void> onLoad() async {
@@ -149,7 +160,7 @@ class BurstObject extends PositionComponent with TapCallbacks {
 
   @override
   void render(Canvas canvas) {
-    final double scale = lifeFraction;
+    final double scale = visualScale;
     final double visual = _baseVisualSize * scale;
     if (visual <= 0.0) return;
 
@@ -188,6 +199,14 @@ class BurstObject extends PositionComponent with TapCallbacks {
 
   @override
   void onTapDown(TapDownEvent event) {
+    // Consume the tap on the topmost object only. Flame delivers tap-downs to
+    // ALL components under the touch point (multi_tap_dispatcher uses
+    // deliverToAll: true), and our hitboxes are floored at 48px (NFR-07), so a
+    // small shape's hitbox can overlap a neighbour's even when they look
+    // separate. Stopping propagation prevents one tap registering on two
+    // objects ("double click"). Reference: §3.3 hitbox, FR-15.
+    event.continuePropagation = false;
+
     if (_hasBeenHandled) return;
     _hasBeenHandled = true;
 

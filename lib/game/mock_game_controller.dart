@@ -129,6 +129,12 @@ class MockGameController implements GameController {
   @override
   int get longestStreak => 12;
 
+  @override
+  int get checkpointsShown => 0;
+
+  @override
+  int get checkpointsPerfect => 0;
+
   void _cancelTimers() {
     _scoreTimer?.cancel();
     _scoreTimer = null;

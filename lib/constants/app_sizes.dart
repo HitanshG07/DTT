@@ -46,8 +46,12 @@ class AppSizes {
   /// Combo badge diameter in logical pixels.
   static const double kComboBadgeSize = 40.0;
 
-  /// Score font size in HUD (Space Grotesk Bold 28pt).
-  static const double kHudScoreFontSize = 28.0;
+  /// Score font size in HUD (Space Grotesk Bold 36pt — the score is the HUD hero).
+  static const double kHudScoreFontSize = 36.0;
+
+  /// Round-time countdown font size in HUD (Space Grotesk Bold 22pt). Burst
+  /// mode replaced the lives/hearts readout with this numeric mm:ss timer.
+  static const double kHudTimeFontSize = 22.0;
 
   /// 'Avoid' label font size below forbidden thumbnail (Inter 10pt).
   static const double kForbiddenLabelFontSize = 10.0;

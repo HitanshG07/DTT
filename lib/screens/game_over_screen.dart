@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_fonts.dart';
 import '../game/game_controller.dart';
+import '../game/checkpoint_manager.dart';
 import '../services/score_service.dart';
 import '../services/progress_service.dart';
 import 'forbidden_intro_screen.dart';
@@ -35,6 +36,11 @@ class _GameOverScreenState extends State<GameOverScreen> {
   double? _accuracy;
   late int _longestStreak;
 
+  /// Memory checkpoints shown this round + the derived ★ Memory rating (Feature
+  /// M). The MEMORY row is hidden entirely on levels without checkpoints.
+  int _checkpointsShown = 0;
+  int _memoryStars = 0;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -57,6 +63,13 @@ class _GameOverScreenState extends State<GameOverScreen> {
       // (2.0 Phase 4B). Persisted best-of via ProgressService.
       _starsEarned =
           _controller.levelConfig.starThresholds.starsFor(_finalScore);
+
+      // Memory rating (Feature M): ★ from the % of this round's checkpoints aced.
+      _checkpointsShown = _controller.checkpointsShown;
+      _memoryStars = CheckpointManager.memoryStarsFor(
+        _controller.checkpointsShown,
+        _controller.checkpointsPerfect,
+      );
 
       _argsParsed = true;
 
@@ -198,6 +211,41 @@ class _GameOverScreenState extends State<GameOverScreen> {
                 }),
               ),
 
+              // MEMORY rating (Feature M): only shown when the level actually had
+              // memory checkpoints this round.
+              if (_checkpointsShown > 0) ...[
+                const SizedBox(height: 16.0),
+                const Text(
+                  "MEMORY",
+                  style: TextStyle(
+                    fontFamily: AppFonts.kFontBody,
+                    fontSize: 11.0,
+                    color: AppColors.kSecondaryText,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 2.0,
+                  ),
+                ),
+                const SizedBox(height: 6.0),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(3, (i) {
+                    final bool earned = i < _memoryStars;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                      child: Icon(
+                        earned
+                            ? Icons.star_rounded
+                            : Icons.star_border_rounded,
+                        size: 26.0,
+                        color: earned
+                            ? const Color(0xFFF5B301)
+                            : AppColors.kSecondaryText,
+                      ),
+                    );
+                  }),
+                ),
+              ],
+
               const Spacer(flex: 2),
 
               // 3-column stats row
@@ -323,7 +371,11 @@ class _GameOverScreenState extends State<GameOverScreen> {
                             PageRouteBuilder(
                               settings: const RouteSettings(name: '/forbidden-intro'),
                               pageBuilder: (context, animation, secondaryAnimation) =>
-                                  ForbiddenIntroScreen(prefs: widget.prefs),
+                                  // 2.0 Phase 4C-2: replay the SAME level.
+                                  ForbiddenIntroScreen(
+                                    prefs: widget.prefs,
+                                    level: _controller.level,
+                                  ),
                               transitionsBuilder: (context, animation, secondaryAnimation, child) {
                                 return FadeTransition(
                                   opacity: animation,
@@ -347,7 +399,9 @@ class _GameOverScreenState extends State<GameOverScreen> {
               ),
               const SizedBox(height: 16.0),
 
-              // HOME Button
+              // MAP Button — returns to the level map (2.0 Phase 4C-2). The
+              // map is rebuilt, so freshly earned stars / unlocks are visible;
+              // the Start screen stays at the root (map's back returns to it).
               SizedBox(
                 width: double.infinity,
                 height: 56.0,
@@ -360,10 +414,14 @@ class _GameOverScreenState extends State<GameOverScreen> {
                     ),
                   ),
                   onPressed: () {
-                    Navigator.pushNamedAndRemoveUntil(context, '/start', (_) => false);
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      '/map',
+                      (route) => route.isFirst,
+                    );
                   },
                   child: const Text(
-                    "HOME",
+                    "MAP",
                     style: TextStyle(
                       fontFamily: AppFonts.kFontDisplay,
                       fontSize: 18.0,

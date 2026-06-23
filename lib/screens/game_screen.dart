@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../game/dtt_game.dart';
 import '../game/game_controller.dart';
-import '../constants/app_sizes.dart';
-import '../overlays/countdown_bar.dart';
 import '../overlays/hud_overlay.dart';
 import '../overlays/memory_checkpoint_overlay.dart';
 import '../overlays/pause_overlay.dart';
@@ -142,14 +140,15 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   void dispose() {
     // Mandatory disposal order (Section 7.2 / Section 5.2):
     // 1. removeObserver
-    // 2. state.dispose()
-    // 3. controller.dispose()
+    // 2. remove our listeners
+    // 3. controller.dispose() — which owns state.dispose() per the
+    //    GameController contract. We must NOT dispose state ourselves here, or
+    //    it gets disposed twice ("ValueNotifier used after being disposed").
     WidgetsBinding.instance.removeObserver(this);
     if (_hasInitialised) {
       _controller.state.lives.removeListener(_checkGameOver);
       _controller.state.timeRemaining.removeListener(_checkTimeUp);
       _controller.state.checkpointActive.removeListener(_onCheckpointChanged);
-      _controller.state.dispose(); // ValueNotifier disposal rule (Section 7.2)
       _controller.dispose();
     }
     super.dispose();
@@ -193,13 +192,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                 child: HudOverlay(controller: _controller),
               ),
 
-              // Layer 2b: Burst-mode round countdown bar, directly below the HUD.
-              Positioned(
-                top: AppSizes.kHudHeight,
-                left: 0,
-                right: 0,
-                child: CountdownBar(controller: _controller),
-              ),
+              // Layer 2b: the round clock is shown numerically in the HUD's
+              // left slot (2.0 time economy); the old progress bar was removed.
 
               // Pause button in bottom right (Section 11.4)
               Positioned(

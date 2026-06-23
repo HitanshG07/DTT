@@ -4,9 +4,10 @@
 > what remains. Companions: `DTT_2.0_ROADMAP.md` (what/why), `DTT_2.0_MILESTONES.md` (gates),
 > `PHASE_1_PROGRESS.md` (deep Phase-1 handoff).
 >
-> **Last updated:** 2026-06-20.
-> **Overall status:** Phase 0 ✅ committed · Phase 1 ✅ code-complete & green (device-verify +
-> commit pending) · Phases 2–5 ⛔ not started.
+> **Last updated:** 2026-06-22.
+> **Overall status:** Phases 0–4 ✅ complete & green (4C device-verified) · Phase 5 in progress —
+> 5.0 docs ✅, Part A dev-unlock ✅ (113 tests green); **Hotfix H** (humane caps, L21–30) planned &
+> documented, code next.
 
 | Phase | Title | Status |
 |---|---|---|
@@ -14,8 +15,8 @@
 | 1 | Engine pivot → Spatial Burst | ✅ Code complete, analyze clean, 81/81 tests green · ⛔ device-verify + commit pending |
 | 2 | Bomb + White Blast + time economy | ✅ Code complete, analyze clean, 88/88 tests green · ⛔ device-verify + commit pending |
 | 3 | Memory checkpoints | ✅ Code complete, analyze clean, 95/95 tests green · ⛔ device-verify + commit pending |
-| 4 | 30-level generated map + 3-star mastery | 🟡 In progress — **4A + 4B done** (engine + stars/progression, analyze clean, 101/101 green); 4C (map UI) remains |
-| 5 | Classic Falling (Zen) mode + polish | ⛔ Not started |
+| 4 | 30-level generated map + 3-star mastery | ✅ DONE — **4A + 4B + 4C-1 + 4C-2 complete & device-verified** (engine + stars + map + full nav loop; analyze clean, 108/108 green; emulator-verified) |
+| 5 | Modes, Modifiers & Accelerated Progression (replanned) | 🟡 In progress — 5.0 docs ✅, Part A dev-unlock ✅ (113 green); Hotfix H (humane caps L21–30) + 5A–5H pending |
 
 ---
 
@@ -141,7 +142,7 @@ one over-reaching forbidden-change L5 test trimmed to in-round rotations (docume
 
 **Remaining:** ⛔ device/emulator verification + commit.
 
-## 🟡 Phase 4 — 30-level generated map + 3-star mastery (4A done; 4B/4C remain)
+## ✅ Phase 4 — 30-level generated map + 3-star mastery (4A+4B+4C complete & device-verified)
 
 Split into 4A (difficulty engine) → 4B (stars/progression) → 4C (map UI). Design: 6 worlds × 5
 = 30; breakpoints bombs@4 / checkpoints@9 / rotation@13 / order-recall@21; sawtooth curve;
@@ -169,16 +170,62 @@ flavors; human-possible hard caps; star override map. See `DTT_2.0_ROADMAP.md §
 - Tests: `progress_service_test` (7) — best-of, no-downgrade, unlock gating, getAllStars.
 - ⛔ Remaining: device verification (a level awards/saves stars, unlock persists).
 
-**⛔ Phase 4C — Map + navigation:** not started, **split into two safe parts**:
-- **4C-1 — Map screen (render + data):** chaptered winding-path `map_screen.dart` (30 nodes, 6
-  worlds, locks + stars from `ProgressService`, scroll/auto-scroll) on its own route, existing
-  nav untouched (node taps no-op). Low-risk, widget-testable.
-- **4C-2 — Navigation flow:** wire `Start → Map → node → forbidden-intro(level) → game → Game
-  Over → Map`, threading the chosen `level` through. Riskier (touches existing nav).
+**🟡 Phase 4C — Map + navigation:** **split into two safe parts; 4C-1 DONE, 4C-2 remains.**
+- **✅ 4C-1 — Map screen (render + data):** DONE. Built `lib/screens/map_screen.dart` — a
+  chaptered winding-path: 6 world chapters (banner + per-world tint/name from the flavour arc),
+  30 serpentine nodes, vertical scroll with auto-scroll to the current (highest-unlocked) node.
+  Each node reads locked/unlocked + 3-pip star count from `ProgressService.getAllStars(30)`
+  (unlock = previous level ≥1★; L1 always open); locked nodes show a lock icon instead of the
+  number. Registered on its own `/map` route in `app.dart`; **existing nav untouched** — node
+  taps are an inert `_onNodeTap` (flow lands in 4C-2). Tests: `test/widget/map_screen_test.dart`
+  (5 widget tests). Gate **PASSED**: analyze clean, 106/106 green.
+- **✅ 4C-2 — Navigation flow:** CODE-COMPLETE (device verify pending). Wired the full loop
+  `Start → Map → node → forbidden-intro(level) → game → Game Over → Map`:
+  - `StartScreen` PLAY → `/map` (the map is now the hub).
+  - `MapScreen._onNodeTap(level)` → `pushNamed('/forbidden-intro', arguments: {'level': level})`,
+    and reloads progress on return so new stars/unlocks appear.
+  - `app.dart` `/forbidden-intro` route reads `{'level': n}` (defaults to 1) → passes to
+    `ForbiddenIntroScreen(level:)` → `RealGameController(level: n)` (loads that `LevelConfig`).
+  - `GameOverScreen`: RETRY replays the **same** level (`level: _controller.level`); the second
+    button is now **MAP** → `pushNamedAndRemoveUntil('/map', (r)=>r.isFirst)` (Start stays at root,
+    map rebuilt so earned stars/unlocks show).
+  - Stars already persist via `ProgressService.saveStars(_controller.level, …)` at Game Over.
+  - Tests: `map_navigation_test.dart` (tap→intro with level arg; locked node inert) + updated
+    `map_screen_test`/`start_screen_test`. Gate: analyze clean, **108/108 green**.
+  - ✅ Device-verified on emulator-5554 (`dtt_shots/H03`–`H06`): PLAY→Map; tapping Level 2 →
+    its forbidden-intro (circle) → Level-2 game; Game Over showed the **MAP** button + 0 stars
+    for a 0 score; MAP returned to a refreshed map. Gating proven both ways — L1 ★★★ ⇒ L2
+    unlocked, and a 0-score L2 run left L3 **locked**. L1 ★★★ + BEST 1520 loaded on a fresh
+    launch (progress survives restart).
 
-## Phase 5 — NOT TOUCHED
+## 🟡 Phase 5 — Modes, Modifiers & Accelerated Progression (IN PROGRESS — 5.0 + Part A done)
 
-Nothing built. Scope (Zen mode + Practice Mode + polish) in `DTT_2.0_ROADMAP.md §8`.
+**Replanned 2026-06-22.** The old "revive falling as Zen + chores" Phase 5 was **dropped** as
+low-value (`GameMode.zen` stays dormant, not surfaced). New scope finishes the game around its
+identity — a go/no-go inhibition + visual-search + working-memory trainer. Full narrative in
+`DTT_2.0_ROADMAP.md §8`; gated milestone tables in `DTT_2.0_MILESTONES.md` (Phase 5).
+
+**Decisions locked in:** modifiers are **campaign-flavor only** (no player toggles); **Endless =
+pure survival, no modifiers**; **accelerated "tasting menu"** introduces every modifier by ~L9.
+
+**Sub-phases:**
+- **5.0 Documentation** — ✅ done (ROADMAP §8, MILESTONES Phase 5, this section).
+- **Part A — Dev unlock-all** — ✅ done (`DebugFlags.unlockAllLevels` + red `[DEV UNLOCK]` badge; 113 tests green).
+- **Hotfix H — Humane difficulty caps (L21–30)** — 🔵 planned & documented, code not started. Dev-unlock
+  playtest found L30 humanly impossible; ease worlds 5–6 only (L1–20 untouched): lifetime ≥1.7s,
+  size 42–52px, ≥50% visual-shrink floor (`LevelConfig.minVisualScale`), ≤7 on-screen, waves ≤6,
+  spawn ≤1.4/s. Also: **≤2 simultaneous modifiers** guardrail (for 5B/5H) + **Bug-MS** score-50 centre pop.
+- **5A — Practice Mode** — ⛔ (long-press a node; no stars/best saved).
+- **5B — Modifier framework + `blind`** — ⛔ (`Set<RoundModifier>` on `LevelConfig` + first-encounter coachmark).
+- **5C — Endless Burst** — ⛔ (score-gated continuous ramp; survival-by-time; separate best key).
+- **5D — `dualTarget`** — ⛔ (two forbidden shapes; + `blind+dualTarget` combo smoke-test).
+- **5E — `ruleFlip`** — ⛔ (cued inversion; **bomb immune**; REVERSE cue + reduce-flashing fallback).
+- **5F — `taskSwitch`** — ⛔ (scheduled flipping, reuses 5E).
+- **5G — `nBack`** — ⛔ (paused checkpoint; bounded wave-history queue; standard economy).
+- **5H — Progression rewrite + ship copy** — ⛔ (`getModifiersForLevel`, new world themes, W1–3/W4–6 playtests).
+
+**Parked as future ideas:** feedback/feel (mistake replay, heatmap, stop-signal, focus-sprint),
+Calibration, Calm mode, Daily challenge, custom builder, seed codes, cosmetics, full tutorial.
 
 ---
 
@@ -189,4 +236,8 @@ Nothing built. Scope (Zen mode + Practice Mode + polish) in `DTT_2.0_ROADMAP.md 
 - **Marketing honesty:** paradigm-based language only; no "clinically proven" claims (P5 copy).
 
 ## Immediate next action
-Device-verify Phase 1 on the emulator → commit → start Phase 2.
+Phases 0–4 complete & green plus this session's post-Phase-4 polish (HUD redesign, constellation
+map, lifecycle/overlapping-tap/timer-start bug fixes). **Phase 5.0 docs ✅, Part A dev-unlock ✅
+(113 tests green).** Next code step: **Hotfix H — humane difficulty caps (L21–30 only)** —
+conditional caps + data-driven `LevelConfig.minVisualScale`, plus Bug-MS (score-50 centre pop).
+Then 5A — Practice Mode. _(Hotfix H is planned & documented; code deferred per current instruction.)_

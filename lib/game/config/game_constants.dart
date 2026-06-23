@@ -80,4 +80,15 @@ class GameConstants {
   /// Seconds subtracted from the round clock when a bomb is tapped (§5). Bombs
   /// cost more than the forbidden shape because they are always-salient.
   static const double kBombTimePenalty = 4.0;
+
+  // --- Feature M: Frenzy Mode (memory-checkpoint reward) ---
+
+  /// Length in seconds of the Frenzy window ignited by acing a memory
+  /// checkpoint. During it, correct taps score [kFrenzyScoreMultiplier]× base.
+  static const double kFrenzyDurationSeconds = 5.0;
+
+  /// Per-tap score multiplier applied on top of the combo during Frenzy Mode.
+  /// Points are still *earned* tap-by-tap, so this rewards the sprint without
+  /// flat-score inflation. Bomb/forbidden penalties are unaffected (integrity).
+  static const int kFrenzyScoreMultiplier = 2;
 }

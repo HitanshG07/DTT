@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../constants/debug_flags.dart';
+
 /// Persists per-level star progress and answers unlock queries (2.0 Phase 4B).
 ///
 /// Stars are stored per level under `dtt_stars_level_<n>` with **best-of**
@@ -30,6 +32,7 @@ class ProgressService {
   /// Whether [level] is unlocked: Level 1 is always open; otherwise the prior
   /// level must have ≥1 star.
   Future<bool> isUnlocked(int level) async {
+    if (DebugFlags.unlockAllLevels) return true; // dev: whole campaign reachable
     if (level <= 1) return true;
     final prevStars = await getStars(level - 1);
     return prevStars >= 1;

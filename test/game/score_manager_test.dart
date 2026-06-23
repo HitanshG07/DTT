@@ -127,4 +127,54 @@ void main() {
       expect(manager.longestStreak, equals(3));
     });
   });
+
+  group('ScoreManager — Frenzy Mode (Feature M)', () {
+    test('onCorrectTap returns the points it awarded', () {
+      // First tap takes the multiplier to 2 → 10 * 2 = 20.
+      final awarded = manager.onCorrectTap();
+      expect(awarded, GameConstants.kScorePerTap * 2);
+      expect(awarded, state.score.value);
+    });
+
+    test('frenzy doubles correct-tap points (and the returned value)', () {
+      manager.startFrenzy();
+      expect(manager.isFrenzyActive, isTrue);
+
+      // mult → 2, frenzy ×2 → 10 * 2 * 2 = 40.
+      final awarded = manager.onCorrectTap();
+      expect(
+        awarded,
+        GameConstants.kScorePerTap * GameConstants.kFrenzyScoreMultiplier * 2,
+      );
+      expect(state.score.value, 40);
+    });
+
+    test('frenzy auto-ends after kFrenzyDurationSeconds via tick', () {
+      manager.startFrenzy();
+      manager.tick(GameConstants.kFrenzyDurationSeconds);
+      expect(manager.isFrenzyActive, isFalse);
+    });
+
+    test('endFrenzy clears immediately and points stop doubling', () {
+      manager.startFrenzy();
+      manager.endFrenzy();
+      expect(manager.isFrenzyActive, isFalse);
+
+      // mult → 2, NOT doubled → 20.
+      final awarded = manager.onCorrectTap();
+      expect(awarded, GameConstants.kScorePerTap * 2);
+    });
+
+    test('INTEGRITY: penalty still fully resets the combo during frenzy', () {
+      manager.startFrenzy();
+      manager.onCorrectTap();
+      manager.onCorrectTap();
+      expect(state.multiplier.value, greaterThan(1));
+
+      // Bomb/forbidden share onPenaltyTap — frenzy must not soften it.
+      manager.onPenaltyTap();
+      expect(state.multiplier.value, 1);
+      expect(manager.isFrenzyActive, isTrue, reason: 'penalty does not end frenzy');
+    });
+  });
 }
